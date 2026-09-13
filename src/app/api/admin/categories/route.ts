@@ -13,6 +13,8 @@ const patchSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   image: z.string().trim().max(1000).nullable().optional(),
+  heroImage: z.string().trim().max(1000).nullable().optional(),
+  heroImagePosition: z.string().trim().max(60).nullable().optional(),
   seoTitle: z.string().trim().max(70).nullable().optional(),
   seoDescription: z.string().trim().max(200).nullable().optional(),
   enabled: z.boolean().optional(),

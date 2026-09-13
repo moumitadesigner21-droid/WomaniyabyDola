@@ -62,6 +62,8 @@ export default async function CategoryPage({
           eyebrow="Shop by Category"
           title={category.name}
           description={category.description ?? ""}
+          image={category.heroImage}
+          imagePosition={category.heroImagePosition}
         />
 
         <section className="bg-ivory py-12 lg:py-16">

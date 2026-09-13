@@ -22,10 +22,44 @@ import {
   contactUsSchema,
   policiesSchema,
   shippingPaymentSchema,
+  shopPageSchema,
   socialSchema,
   voicesGallerySchema,
   whatsappTemplateSchema,
 } from "@/lib/cms/content-schemas";
+
+const FRAMING = [
+  { value: "center center", label: "Centre" },
+  { value: "center top", label: "Top" },
+  { value: "center 25%", label: "Upper third" },
+  { value: "center bottom", label: "Bottom" },
+];
+
+function ShopPageEditor() {
+  const editor = useContent("shop_page", shopPageSchema, CONTENT_DEFAULTS.shop_page);
+  const v = editor.value;
+  return (
+    <BlobEditor
+      title="Shop page banner"
+      description="The banner at the top of /shop. Add a photo to replace the illustrated background; leave it empty to keep the illustration."
+      editor={editor}
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <TextField label="Eyebrow" value={v.eyebrow} onChange={(eyebrow) => editor.update({ ...v, eyebrow })} />
+        <TextField label="Title" required value={v.title} error={editor.errors.title} onChange={(title) => editor.update({ ...v, title })} />
+        <TextArea label="Description" className="md:col-span-2" rows={2} value={v.description} onChange={(description) => editor.update({ ...v, description })} />
+        <ImageField
+          label="Banner photo (optional)"
+          aspect="aspect-[16/7]"
+          hint="Wide landscape photos work best (at least 1600px). Text sits on the right on desktop."
+          value={v.heroImage}
+          onChange={(heroImage) => editor.update({ ...v, heroImage })}
+        />
+        <SelectField label="Photo framing" value={v.heroImagePosition || "center center"} options={FRAMING} onChange={(heroImagePosition) => editor.update({ ...v, heroImagePosition })} />
+      </div>
+    </BlobEditor>
+  );
+}
 
 function AboutEditor() {
   const editor = useContent("about_us", aboutUsSchema, CONTENT_DEFAULTS.about_us);
@@ -331,6 +365,7 @@ function TemplateEditor({ contentKey, title, description }: { contentKey: "whats
 }
 
 const TABS = [
+  { id: "shop", label: "Shop page" },
   { id: "about", label: "About Us" },
   { id: "voices", label: "Voices gallery" },
   { id: "contact", label: "Contact page" },
@@ -349,6 +384,7 @@ export function AdminContentPagesEditor() {
         <p className="mt-2 text-sm text-warm-gray">Page copy, policies, contact details and order messages.</p>
       </div>
       <Tabs tabs={[...TABS]} active={tab} onChange={setTab} />
+      {tab === "shop" ? <ShopPageEditor /> : null}
       {tab === "about" ? <AboutEditor /> : null}
       {tab === "voices" ? <VoicesEditor /> : null}
       {tab === "contact" ? <ContactEditor /> : null}

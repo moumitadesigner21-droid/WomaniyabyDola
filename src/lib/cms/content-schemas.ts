@@ -350,7 +350,16 @@ export const seoSchema = z.object({
     .prefault({}),
 });
 
+export const shopPageSchema = z.object({
+  eyebrow: optStr(80),
+  title: str(120).min(1),
+  description: optStr(400),
+  heroImage: optStr(1000),
+  heroImagePosition: optStr(60),
+});
+
 export const CONTENT_SCHEMAS = {
+  shop_page: shopPageSchema,
   announcement_bar: announcementBarSchema,
   homepage_sections: homepageSectionsSchema,
   hero_slides: heroSlidesSchema,
@@ -390,6 +399,7 @@ export type ShippingPaymentContent = z.infer<typeof shippingPaymentSchema>;
 export type WhatsAppTemplateContent = z.infer<typeof whatsappTemplateSchema>;
 export type AppearanceContent = z.infer<typeof appearanceSchema>;
 export type SeoContent = z.infer<typeof seoSchema>;
+export type ShopPageContent = z.infer<typeof shopPageSchema>;
 export type PageSeo = z.infer<typeof pageSeoSchema>;
 
 export function isContentKey(key: string): key is ContentKey {

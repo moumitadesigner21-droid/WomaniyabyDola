@@ -20,6 +20,7 @@ import {
   policiesSchema,
   seoSchema,
   shippingPaymentSchema,
+  shopPageSchema,
   shopCollectionsSchema,
   socialSchema,
   testimonialsSchema,
@@ -29,6 +30,13 @@ import {
 
 /** Defaults used by the admin "Reset" buttons and as fallbacks when a key is missing. */
 export const CONTENT_DEFAULTS = {
+  shop_page: shopPageSchema.parse({
+    eyebrow: "Heritage Modern",
+    title: "Shop the Collection",
+    description: "Gamcha sarees, dresses, jackets & more — crafted with love from Jalpaiguri.",
+    heroImage: "",
+    heroImagePosition: "center center",
+  }),
   announcement_bar: announcementBarSchema.parse({
     enabled: true,
     text: "Handcrafted in Jalpaiguri · Free shipping on orders above ₹2,500",

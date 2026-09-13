@@ -8,6 +8,9 @@ import { WhatsAppButton } from "@/components/whatsapp-button";
 
 import { JsonLd } from "@/components/json-ld";
 import { getAllCatalogProducts } from "@/lib/catalog-server";
+import { CONTENT_DEFAULTS } from "@/lib/cms/content-defaults";
+import { getSiteContent } from "@/lib/cms/content-repository";
+import { shopPageSchema } from "@/lib/cms/content-schemas";
 import { breadcrumbJsonLd, buildPageMetadata, itemListJsonLd } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +25,12 @@ export function generateMetadata() {
 }
 
 export default async function ShopPage() {
-  const initialProducts = await getAllCatalogProducts();
+  const [initialProducts, rawShopPage] = await Promise.all([
+    getAllCatalogProducts(),
+    getSiteContent<unknown>("shop_page", null),
+  ]);
+  const parsed = shopPageSchema.safeParse(rawShopPage);
+  const shopPage = parsed.success ? parsed.data : CONTENT_DEFAULTS.shop_page;
 
   return (
     <>
@@ -40,9 +48,11 @@ export default async function ShopPage() {
       <main>
         <CategoryPageHero
           category="shop"
-          eyebrow="Heritage Modern"
-          title="Shop the Collection"
-          description="Gamcha sarees, dresses, jackets & more — crafted with love from Jalpaiguri."
+          eyebrow={shopPage.eyebrow}
+          title={shopPage.title}
+          description={shopPage.description}
+          image={shopPage.heroImage || null}
+          imagePosition={shopPage.heroImagePosition}
         />
 
         <section className="bg-ivory py-12 lg:py-16">

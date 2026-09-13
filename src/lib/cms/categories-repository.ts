@@ -9,6 +9,8 @@ function rowToCategory(row: Row, subs: CmsCategory["subcategories"]): CmsCategor
     name: String(row.name),
     description: row.description ? String(row.description) : null,
     image: row.image ? String(row.image) : null,
+    heroImage: row.hero_image ? String(row.hero_image) : null,
+    heroImagePosition: row.hero_image_position ? String(row.hero_image_position) : null,
     sortOrder: Number(row.sort_order),
     enabled: Boolean(row.enabled),
     seoTitle: row.seo_title ? String(row.seo_title) : null,
@@ -52,6 +54,8 @@ export const getCategory = cache(async (slug: string): Promise<CmsCategory | nul
     name: fallback.name,
     description: fallback.description,
     image: null,
+    heroImage: null,
+    heroImagePosition: null,
     sortOrder: 0,
     enabled: true,
     seoTitle: null,
@@ -64,6 +68,8 @@ export interface CategoryUpdate {
   name?: string;
   description?: string | null;
   image?: string | null;
+  heroImage?: string | null;
+  heroImagePosition?: string | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
   enabled?: boolean;
@@ -75,15 +81,18 @@ export async function updateCategory(slug: string, input: CategoryUpdate): Promi
   const merged = { ...existing, ...input };
 
   await execute(
-    `INSERT INTO categories (slug, name, description, image, sort_order, enabled, seo_title, seo_description)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO categories (slug, name, description, image, hero_image, hero_image_position, sort_order, enabled, seo_title, seo_description)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(slug) DO UPDATE SET
        name = excluded.name, description = excluded.description, image = excluded.image,
+       hero_image = excluded.hero_image, hero_image_position = excluded.hero_image_position,
        enabled = excluded.enabled, seo_title = excluded.seo_title, seo_description = excluded.seo_description`,
     slug,
     merged.name,
     merged.description,
     merged.image,
+    merged.heroImage,
+    merged.heroImagePosition,
     merged.sortOrder,
     merged.enabled ? 1 : 0,
     merged.seoTitle,

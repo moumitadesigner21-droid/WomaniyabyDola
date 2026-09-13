@@ -7,6 +7,7 @@ import {
   ListField,
   SaveBar,
   Section,
+  SelectField,
   Tabs,
   TextArea,
   TextField,
@@ -141,6 +142,8 @@ function CategoriesSeoEditor() {
           name: category.name,
           description: category.description,
           image: category.image,
+          heroImage: category.heroImage,
+          heroImagePosition: category.heroImagePosition,
           seoTitle: category.seoTitle,
           seoDescription: category.seoDescription,
           enabled: category.enabled,
@@ -159,7 +162,7 @@ function CategoriesSeoEditor() {
   };
 
   return (
-    <Section title="Categories" description="Name, intro text and search settings for each category page.">
+    <Section title="Categories" description="Name, intro text, banner photo and search settings for each category page.">
       {!loaded ? (
         <p className="text-sm text-warm-gray">Loading…</p>
       ) : (
@@ -177,6 +180,26 @@ function CategoriesSeoEditor() {
                   <TextField label="Search title" maxLength={70} showCounter placeholder={category.name} value={category.seoTitle ?? ""} onChange={(seoTitle) => patch(category.slug, { seoTitle })} />
                   <TextArea label="Search description" rows={3} maxLength={200} showCounter placeholder={category.description ?? ""} value={category.seoDescription ?? ""} onChange={(seoDescription) => patch(category.slug, { seoDescription })} />
                   <ImageField label="Share image" aspect="aspect-[1200/630]" value={category.image ?? ""} onChange={(image) => patch(category.slug, { image })} />
+                  <ImageField
+                    label="Page banner photo (optional)"
+                    aspect="aspect-[16/7]"
+                    hint="Replaces the illustrated banner on this category's page. Leave empty for the illustration."
+                    value={category.heroImage ?? ""}
+                    onChange={(heroImage) => patch(category.slug, { heroImage: heroImage || null })}
+                  />
+                  {category.heroImage ? (
+                    <SelectField
+                      label="Banner framing"
+                      value={category.heroImagePosition || "center center"}
+                      options={[
+                        { value: "center center", label: "Centre" },
+                        { value: "center top", label: "Top" },
+                        { value: "center 25%", label: "Upper third" },
+                        { value: "center bottom", label: "Bottom" },
+                      ]}
+                      onChange={(heroImagePosition) => patch(category.slug, { heroImagePosition })}
+                    />
+                  ) : null}
                   <Toggle label="Category page enabled" checked={category.enabled} onChange={(enabled) => patch(category.slug, { enabled })} />
                 </div>
                 <SeoPreview

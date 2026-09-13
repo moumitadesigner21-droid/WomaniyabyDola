@@ -124,6 +124,9 @@ export interface CmsCategory {
   name: string;
   description: string | null;
   image: string | null;
+  /** Photo behind the category page hero; null = illustrated default. */
+  heroImage: string | null;
+  heroImagePosition: string | null;
   sortOrder: number;
   enabled: boolean;
   seoTitle: string | null;
