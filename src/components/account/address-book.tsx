@@ -79,7 +79,7 @@ export function AddressFields({
       </label>
       <label className="block">
         <span className={labelClass}>PIN code</span>
-        <input required inputMode="numeric" pattern="\\d{6}" maxLength={6} value={value.postalCode} onChange={set("postalCode")} className={inputClass} autoComplete="postal-code" />
+        <input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={value.postalCode} onChange={set("postalCode")} className={inputClass} autoComplete="postal-code" />
         {err("postalCode")}
       </label>
       <label className="block">
