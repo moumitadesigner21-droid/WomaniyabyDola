@@ -3,7 +3,9 @@
 import { ArrowLeft, CheckCircle2, ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LAST_ORDER_KEY } from "@/components/thank-you-content";
 import { AddressCard, AddressFields, emptyAddress } from "@/components/account/address-book";
 import { useCart } from "@/lib/cart";
 import { useCustomer } from "@/lib/customer";
@@ -64,7 +66,9 @@ export function CheckoutContent() {
   const [quoteError, setQuoteError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [result, setResult] = useState<OrderPlacementResult | null>(null);
+  const router = useRouter();
 
   // `items` only changes reference when the cart mutates, so this is stable
   // across re-renders and safe to use as an effect dependency.
@@ -287,6 +291,7 @@ export function CheckoutContent() {
 
     setSubmitting(true);
     setSubmitError("");
+    setFieldErrors({});
 
     try {
       const response = await fetch("/api/orders", {
@@ -305,7 +310,7 @@ export function CheckoutContent() {
       });
 
       const raw = await response.text();
-      let payload: OrderPlacementResult & { error?: string } = {
+      let payload: OrderPlacementResult & { error?: string; issues?: { path: string; message: string }[] } = {
         order: {} as Order,
         whatsappSent: false,
         whatsappError: null,
@@ -318,7 +323,7 @@ export function CheckoutContent() {
 
       if (raw) {
         try {
-          payload = JSON.parse(raw) as OrderPlacementResult & { error?: string };
+          payload = JSON.parse(raw) as typeof payload;
         } catch {
           setSubmitError("Unable to place order. Please try again.");
           return;
@@ -326,7 +331,13 @@ export function CheckoutContent() {
       }
 
       if (!response.ok) {
-        setSubmitError(payload.error ?? "Unable to place order.");
+        const issues = Object.fromEntries((payload.issues ?? []).map((issue) => [issue.path, issue.message]));
+        setFieldErrors(issues);
+        setSubmitError(
+          Object.keys(issues).length
+            ? "Please check the highlighted fields."
+            : payload.error ?? "Unable to place order.",
+        );
         return;
       }
 
@@ -344,8 +355,23 @@ export function CheckoutContent() {
         }
       }
 
-      clearCart();
-      setResult(payload);
+      try {
+        window.sessionStorage.setItem(
+          LAST_ORDER_KEY,
+          JSON.stringify({
+            order: payload.order,
+            customerWhatsappSent: payload.customerWhatsappSent,
+            customerWhatsappError: payload.customerWhatsappError,
+            whatsappSent: payload.whatsappSent,
+          }),
+        );
+        clearCart();
+        router.push("/checkout/thank-you");
+      } catch {
+        // sessionStorage unavailable — fall back to the inline confirmation
+        clearCart();
+        setResult(payload);
+      }
     } catch {
       setSubmitError("Unable to place order. Please check your connection.");
     } finally {
@@ -382,9 +408,12 @@ export function CheckoutContent() {
             <input
               required
               value={name}
+              autoComplete="name"
+              aria-invalid={Boolean(fieldErrors.customerName)}
               onChange={(event) => setName(event.target.value)}
-              className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon"
+              className={`w-full border bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon ${fieldErrors.customerName ? "border-maroon" : "border-charcoal/15"}`}
             />
+            {fieldErrors.customerName ? <span className="mt-1 block text-xs text-maroon">{fieldErrors.customerName}</span> : null}
           </label>
 
           <label className="block">
@@ -395,9 +424,12 @@ export function CheckoutContent() {
               required
               type="tel"
               value={phone}
+              autoComplete="tel"
+              aria-invalid={Boolean(fieldErrors.customerPhone)}
               onChange={(event) => setPhone(event.target.value)}
-              className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon"
+              className={`w-full border bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon ${fieldErrors.customerPhone ? "border-maroon" : "border-charcoal/15"}`}
             />
+            {fieldErrors.customerPhone ? <span className="mt-1 block text-xs text-maroon">{fieldErrors.customerPhone}</span> : null}
           </label>
 
           <label className="block">
@@ -407,9 +439,12 @@ export function CheckoutContent() {
             <input
               type="email"
               value={email}
+              autoComplete="email"
+              aria-invalid={Boolean(fieldErrors.customerEmail)}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon"
+              className={`w-full border bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon ${fieldErrors.customerEmail ? "border-maroon" : "border-charcoal/15"}`}
             />
+            {fieldErrors.customerEmail ? <span className="mt-1 block text-xs text-maroon">{fieldErrors.customerEmail}</span> : null}
           </label>
 
           <div>
@@ -455,7 +490,15 @@ export function CheckoutContent() {
               <>
                 <AddressFields
                   value={{ ...address, fullName: address.fullName || name, phone: address.phone || phone }}
-                  onChange={setAddress}
+                  onChange={(next) =>
+                    // Keep name/phone empty while they merely mirror the contact
+                    // fields, so later edits to those fields flow through.
+                    setAddress({
+                      ...next,
+                      fullName: next.fullName === name ? "" : next.fullName,
+                      phone: next.phone === phone ? "" : next.phone,
+                    })
+                  }
                 />
                 {customer ? (
                   <label className="mt-3 flex items-center gap-2 text-sm text-charcoal">
@@ -499,7 +542,10 @@ export function CheckoutContent() {
           </div>
 
           {submitError ? (
-            <p className="text-sm text-maroon">{submitError}</p>
+            <p role="alert" className="border border-maroon/30 bg-maroon/5 px-4 py-3 text-sm text-maroon">{submitError}</p>
+          ) : null}
+          {fieldErrors.customerAddress ? (
+            <p className="text-xs text-maroon">{fieldErrors.customerAddress}</p>
           ) : null}
 
           <button

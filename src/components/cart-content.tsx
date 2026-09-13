@@ -3,12 +3,21 @@
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect } from "react";
 import { useCart } from "@/lib/cart";
 import { getProductPath } from "@/lib/catalog";
 import { formatPrice } from "@/lib/format";
 
 export function CartContent() {
   const { items, subtotal, itemCount, updateQuantity, removeItem } = useCart();
+
+  useEffect(() => {
+    if (items.length) document.body.setAttribute("data-sticky-bar", "");
+    else document.body.removeAttribute("data-sticky-bar");
+    return () => {
+      document.body.removeAttribute("data-sticky-bar");
+    };
+  }, [items.length]);
 
   if (itemCount === 0) {
     return (
@@ -29,7 +38,7 @@ export function CartContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-5xl px-4 py-12 pb-28 sm:px-6 lg:px-8 lg:pb-12">
       <h1 className="font-serif text-3xl text-maroon sm:text-4xl">Shopping Cart</h1>
       <p className="mt-2 text-sm text-warm-gray">
         {itemCount} item{itemCount === 1 ? "" : "s"} in your bag
@@ -140,6 +149,25 @@ export function CartContent() {
           </Link>
         </aside>
       </div>
+
+      {/* Sticky mobile checkout bar */}
+      {items.length ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-charcoal/10 bg-ivory/95 px-4 py-3 backdrop-blur lg:hidden">
+          <div className="mx-auto flex max-w-lg items-center gap-3">
+            <div className="flex-1">
+              <p className="text-xs text-warm-gray">{itemCount} {itemCount === 1 ? "item" : "items"}</p>
+              <p className="font-medium text-maroon">{formatPrice(subtotal)}</p>
+            </div>
+            <Link
+              href="/checkout"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 bg-maroon px-5 text-xs font-semibold tracking-[0.16em] text-ivory uppercase"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              Checkout
+            </Link>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

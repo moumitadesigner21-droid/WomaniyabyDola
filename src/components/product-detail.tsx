@@ -4,7 +4,7 @@ import { Minus, Plus, ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WishlistButton } from "@/components/wishlist-button";
 import { useCart } from "@/lib/cart";
 import { getCategoryLabel, getCategoryPath } from "@/lib/categories";
@@ -86,6 +86,38 @@ export function ProductDetail({ product }: ProductDetailProps) {
     [product.dimensions, product.description],
   );
 
+  // Sticky mobile bar shows once the main buttons scroll out of view.
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const [showStickyBar, setShowStickyBar] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const node = ctaRef.current;
+      if (!node) return;
+      // Show once the main buttons have scrolled above the viewport.
+      setShowStickyBar(node.getBoundingClientRect().bottom < 0);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (showStickyBar) document.body.setAttribute("data-sticky-bar", "");
+    else document.body.removeAttribute("data-sticky-bar");
+    return () => {
+      document.body.removeAttribute("data-sticky-bar");
+    };
+  }, [showStickyBar]);
+
   const canBuy = hasOptions
     ? Boolean(selectedVariant?.inStock)
     : !soldOut && !(product.sizes?.length && !selectedSize);
@@ -117,7 +149,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+    <div className="mx-auto max-w-7xl px-4 py-10 pb-24 sm:px-6 lg:px-8 lg:py-14">
       <nav
         aria-label="Breadcrumb"
         className="flex flex-wrap items-center gap-2 text-xs tracking-[0.14em] text-warm-gray uppercase"
@@ -143,11 +175,11 @@ export function ProductDetail({ product }: ProductDetailProps) {
               className="flex w-[4.5rem] shrink-0 flex-col gap-2 overflow-y-auto sm:w-20 lg:w-24"
               aria-label="Product image thumbnails"
             >
-              {images.map((image) => (
+              {images.map((image, index) => (
                 <button
                   key={image}
                   type="button"
-                  aria-label="Show product image"
+                  aria-label={`Show ${product.name} photo ${index + 1}`}
                   aria-current={selectedImage === image ? "true" : undefined}
                   onClick={() => setSelectedImage(image)}
                   className={`relative aspect-[3/4] w-full shrink-0 overflow-hidden border bg-ivory transition-colors ${
@@ -158,7 +190,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 >
                   <Image
                     src={image}
-                    alt=""
+                    alt={`${product.name} — photo ${index + 1}`}
                     fill
                     className="object-contain object-center p-1"
                     sizes="96px"
@@ -380,6 +412,46 @@ export function ProductDetail({ product }: ProductDetailProps) {
               </button>
             </div>
           )}
+          <div ref={ctaRef} aria-hidden className="h-px" />
+        </div>
+      </div>
+
+      {/* Sticky mobile CTA */}
+      <div
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-charcoal/10 bg-ivory/95 px-4 py-3 backdrop-blur transition-transform duration-300 lg:hidden ${
+          showStickyBar ? "translate-y-0" : "translate-y-full"
+        }`}
+        aria-hidden={!showStickyBar}
+      >
+        <div className="mx-auto flex max-w-lg items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs text-warm-gray">{product.name}</p>
+            <p className="font-medium text-maroon">
+              {formatPrice(displayPrice)}
+              {hasOptions && selectedVariant ? (
+                <span className="ml-2 text-xs font-normal text-warm-gray">{selectedVariant.label}</span>
+              ) : null}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (!canBuy) {
+                ctaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                return;
+              }
+              handleAddToCart();
+            }}
+            tabIndex={showStickyBar ? 0 : -1}
+            className={`inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 px-5 text-xs font-semibold tracking-[0.16em] uppercase ${
+              soldOut && !hasOptions
+                ? "border border-charcoal/15 text-warm-gray"
+                : "bg-maroon text-ivory"
+            }`}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {soldOut && !hasOptions ? "Sold out" : canBuy ? "Add to cart" : "Choose options"}
+          </button>
         </div>
       </div>
     </div>

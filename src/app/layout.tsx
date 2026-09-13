@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { DM_Sans, Playfair_Display } from "next/font/google";
+import { CookieNotice } from "@/components/cookie-notice";
 import { HashScroll } from "@/components/hash-scroll";
+import { NavigationProgress } from "@/components/navigation-progress";
 import { CartProvider } from "@/lib/cart";
 import { CustomerProvider } from "@/lib/customer";
 import { JsonLd } from "@/components/json-ld";
@@ -82,8 +85,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <JsonLd data={[organization, website]} />
         <CustomerProvider>
           <CartProvider>
+            <Suspense fallback={null}>
+              <NavigationProgress />
+            </Suspense>
             <HashScroll />
             {children}
+            <CookieNotice />
           </CartProvider>
         </CustomerProvider>
       </body>

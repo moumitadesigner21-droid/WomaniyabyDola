@@ -49,6 +49,16 @@ body {
   }
 }
 
+@keyframes nav-progress {
+  0% { width: 0; }
+  60% { width: 70%; }
+  100% { width: 92%; }
+}
+
+.animate-nav-progress {
+  animation: nav-progress 2.5s ease-out forwards;
+}
+
 .animate-fade-up {
   animation: fade-up 0.8s ease-out forwards;
 }

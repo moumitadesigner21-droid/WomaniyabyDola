@@ -72,7 +72,7 @@ export function ProductCard({
           {hoverImage ? (
             <Image
               src={hoverImage}
-              alt=""
+              alt={`${product.name} — alternate view`}
               fill
               className="object-cover opacity-0 transition-opacity duration-500 [@media(hover:hover)]:group-hover:opacity-100"
               style={{ objectPosition }}

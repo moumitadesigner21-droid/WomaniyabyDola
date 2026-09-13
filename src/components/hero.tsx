@@ -391,7 +391,7 @@ export function Hero({ slides }: HeroProps) {
                 >
                   <Image
                     src={slide.desktopImage}
-                    alt=""
+                    alt={slide.title}
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-110"
                     style={{
