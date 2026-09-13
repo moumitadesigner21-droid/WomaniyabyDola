@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useCart } from "@/lib/cart";
 import { getCategoryLabel, getCategoryPath } from "@/lib/categories";
-import { getProductHoverImage, type Product } from "@/lib/data";
+import type { Product } from "@/lib/data";
 import { getProductImagesFromProduct } from "@/lib/catalog";
 import { formatPrice } from "@/lib/format";
 
@@ -19,7 +19,16 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addItem } = useCart();
-  const images = getProductImagesFromProduct(product);
+  const options = product.options ?? [];
+  const variants = product.variants ?? [];
+  const images = [
+    ...new Set([
+      ...getProductImagesFromProduct(product),
+      ...variants.map((v) => v.image).filter((src): src is string => Boolean(src)),
+    ]),
+  ];
+  const hasOptions = options.length > 0 && variants.length > 0;
+
   const initialSize =
     product.sizes?.find((size) => size === searchParams.get("size")) ??
     product.sizes?.[0] ??
@@ -27,8 +36,33 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const [selectedImage, setSelectedImage] = useState(product.image);
   const [selectedSize, setSelectedSize] = useState(initialSize);
   const [quantity, setQuantity] = useState(1);
+  // One chosen value per option; pre-select the first in-stock variant.
+  const [selection, setSelection] = useState<Record<string, string>>(() => {
+    const first = variants.find((v) => v.inStock) ?? variants[0];
+    return first ? { ...first.values } : {};
+  });
 
-  const hoverImage = getProductHoverImage(product);
+  const selectedVariant = hasOptions
+    ? variants.find((v) => options.every((o) => v.values[o.name] === selection[o.name]))
+    : undefined;
+  const selectionComplete = !hasOptions || options.every((o) => selection[o.name]);
+
+  /** True when picking `value` for `option` (keeping the rest) yields an in-stock variant. */
+  const isValueAvailable = (optionName: string, value: string) =>
+    variants.some(
+      (v) =>
+        v.inStock &&
+        v.values[optionName] === value &&
+        options.every((o) => o.name === optionName || !selection[o.name] || v.values[o.name] === selection[o.name]),
+    );
+
+  const displayPrice = selectedVariant?.price ?? product.price;
+  const displayCompareAt = selectedVariant ? selectedVariant.compareAtPrice : product.compareAtPrice;
+  const soldOut = hasOptions
+    ? selectionComplete
+      ? !selectedVariant || !selectedVariant.inStock
+      : product.inStock === false
+    : product.inStock === false;
   const isSkirtProduct = product.category === "skirts-wrappers";
   const isOutfitProduct =
     product.category === "outfits" || product.category === "jamdani";
@@ -51,22 +85,34 @@ export function ProductDetail({ product }: ProductDetailProps) {
     [product.dimensions, product.description],
   );
 
-  const handleAddToCart = () => {
-    if (product.sizes?.length && !selectedSize) return;
+  const canBuy = hasOptions
+    ? Boolean(selectedVariant?.inStock)
+    : !soldOut && !(product.sizes?.length && !selectedSize);
+
+  const addSelection = () =>
     addItem(product, {
-      size: selectedSize || undefined,
+      size: hasOptions ? undefined : selectedSize || undefined,
+      variantId: selectedVariant?.id,
       quantity,
     });
+
+  const handleAddToCart = () => {
+    if (!canBuy) return;
+    addSelection();
     router.push("/cart");
   };
 
   const handleBuyNow = () => {
-    if (product.sizes?.length && !selectedSize) return;
-    addItem(product, {
-      size: selectedSize || undefined,
-      quantity,
-    });
+    if (!canBuy) return;
+    addSelection();
     router.push("/checkout");
+  };
+
+  const chooseValue = (optionName: string, value: string) => {
+    const next = { ...selection, [optionName]: value };
+    setSelection(next);
+    const match = variants.find((v) => options.every((o) => v.values[o.name] === next[o.name]));
+    if (match?.image) setSelectedImage(match.image);
   };
 
   return (
@@ -166,7 +212,12 @@ export function ProductDetail({ product }: ProductDetailProps) {
             {product.name}
           </h1>
           <p className="mt-4 text-2xl font-medium text-maroon">
-            {formatPrice(product.price)}
+            {formatPrice(displayPrice)}
+            {displayCompareAt ? (
+              <span className="ml-3 text-base font-normal text-warm-gray line-through">
+                {formatPrice(displayCompareAt)}
+              </span>
+            ) : null}
           </p>
 
           {details.length > 0 ? (
@@ -187,7 +238,54 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </p>
           )}
 
-          {product.sizes?.length ? (
+          {hasOptions
+            ? options.map((option) => (
+                <div key={option.name} className="mt-8">
+                  <p className="mb-3 text-[10px] font-semibold tracking-[0.2em] text-charcoal uppercase">
+                    {option.name}
+                    {selection[option.name] ? (
+                      <span className="ml-2 font-normal normal-case tracking-normal text-warm-gray">
+                        {selection[option.name]}
+                      </span>
+                    ) : null}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {option.values.map((value) => {
+                      const active = selection[option.name] === value;
+                      const available = isValueAvailable(option.name, value);
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => chooseValue(option.name, value)}
+                          aria-pressed={active}
+                          className={`relative inline-flex min-h-[40px] items-center justify-center border px-4 py-2 text-xs font-semibold transition-colors ${
+                            active
+                              ? "border-maroon bg-maroon text-ivory"
+                              : available
+                                ? "border-charcoal/20 bg-white text-charcoal hover:border-maroon/50 hover:text-maroon"
+                                : "border-dashed border-charcoal/20 bg-white text-charcoal/40"
+                          }`}
+                        >
+                          {value}
+                          {!available ? (
+                            <span aria-hidden className="absolute inset-x-1 top-1/2 h-px -rotate-12 bg-charcoal/30" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            : null}
+          {hasOptions && selectionComplete && selectedVariant && !selectedVariant.inStock ? (
+            <p className="mt-3 text-xs text-maroon">This combination is sold out.</p>
+          ) : null}
+          {hasOptions && product.customSizeNote ? (
+            <p className="mt-3 text-xs leading-relaxed text-warm-gray">{product.customSizeNote}</p>
+          ) : null}
+
+          {!hasOptions && product.sizes?.length ? (
             <div className="mt-8">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.2em] text-charcoal uppercase">
                 Select Size
@@ -244,23 +342,36 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </div>
           </div>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 border border-maroon bg-maroon px-6 py-3 text-xs font-semibold tracking-[0.16em] text-ivory uppercase transition-colors hover:bg-maroon-dark"
-            >
-              <ShoppingBag className="h-4 w-4" />
-              Add to Cart
-            </button>
-            <button
-              type="button"
-              onClick={handleBuyNow}
-              className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 border border-charcoal/15 bg-white px-6 py-3 text-xs font-semibold tracking-[0.16em] text-charcoal uppercase transition-colors hover:border-maroon/40 hover:text-maroon"
-            >
-              Buy Now
-            </button>
-          </div>
+          {soldOut && !hasOptions ? (
+            <div className="mt-8 border border-charcoal/15 bg-ivory px-6 py-4 text-center">
+              <p className="text-xs font-semibold tracking-[0.16em] text-charcoal uppercase">
+                Sold Out
+              </p>
+              <p className="mt-1 text-xs text-warm-gray">
+                Message us on WhatsApp to ask about a restock or a custom order.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                disabled={!canBuy}
+                className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 border border-maroon bg-maroon px-6 py-3 text-xs font-semibold tracking-[0.16em] text-ivory uppercase transition-colors hover:bg-maroon-dark disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ShoppingBag className="h-4 w-4" />
+                {hasOptions && !canBuy ? "Sold Out" : "Add to Cart"}
+              </button>
+              <button
+                type="button"
+                onClick={handleBuyNow}
+                disabled={!canBuy}
+                className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 border border-charcoal/15 bg-white px-6 py-3 text-xs font-semibold tracking-[0.16em] text-charcoal uppercase transition-colors hover:border-maroon/40 hover:text-maroon disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Buy Now
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

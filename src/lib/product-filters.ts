@@ -84,7 +84,7 @@ export function filterAndSortProducts(
   sort: SortOption,
   priceFilter: PriceFilterId,
 ): Product[] {
-  let result = products.filter((product) =>
+  const result = products.filter((product) =>
     matchesPriceFilter(product.price, priceFilter),
   );
 

@@ -37,17 +37,17 @@ function getContentVariants(reducedMotion: boolean | null): Variants {
   }
 
   return {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 16 },
     visible: (i: number) => ({
       opacity: 1,
       y: 0,
       transition: {
-        delay: 0.08 + i * 0.07,
-        duration: 0.6,
+        delay: 0.15 + i * 0.06,
+        duration: 0.55,
         ease: [0.22, 1, 0.36, 1],
       },
     }),
-    exit: { opacity: 0, y: -12, transition: { duration: 0.25 } },
+    exit: { opacity: 0, y: -8, transition: { duration: 0.2, ease: "easeIn" } },
   };
 }
 
@@ -94,7 +94,8 @@ export function Hero({ slides }: HeroProps) {
   useEffect(() => {
     if (prefersReducedMotion || total <= 1) return;
 
-    setProgress(0);
+    // Progress is reset by the first animation frame below rather than a
+    // synchronous setState here.
     const start = performance.now();
     let frame: number;
 
@@ -192,7 +193,7 @@ export function Hero({ slides }: HeroProps) {
               {slideNumber}
             </span>
 
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={currentIndex}
                 initial="hidden"
@@ -322,11 +323,7 @@ export function Hero({ slides }: HeroProps) {
                         : { opacity: 0, scale: 1.04 }
                     }
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={
-                      prefersReducedMotion
-                        ? undefined
-                        : { opacity: 0, scale: 0.98 }
-                    }
+                    exit={{ opacity: 1, transition: { duration: imageTransition.duration } }}
                     transition={imageTransition}
                   >
                     <Image
@@ -344,17 +341,20 @@ export function Hero({ slides }: HeroProps) {
                   </motion.div>
                 </AnimatePresence>
 
-                {/* Floating stat badge */}
+              </div>
+
+              {/* Floating stat badge — top-right, clear of the large bottom-left curve */}
+              {current.stat ? (
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={`stat-${currentIndex}`}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: -8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.4 }}
-                    className="absolute bottom-5 left-5 right-5 sm:bottom-6 sm:left-6 sm:right-auto"
+                    transition={{ duration: 0.35 }}
+                    className="absolute top-4 right-4 z-10 sm:top-5 sm:right-5 lg:top-6 lg:right-6"
                   >
-                    <div className="inline-flex items-center gap-3 border border-ivory/20 bg-ivory/90 px-4 py-2.5 backdrop-blur-sm">
+                    <div className="inline-flex items-center gap-3 border border-ivory/30 bg-ivory/92 px-4 py-2.5 shadow-[0_12px_32px_-12px_rgba(44,44,44,0.35)] backdrop-blur-sm">
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />
                       <span className="text-[11px] font-medium tracking-[0.12em] text-charcoal uppercase">
                         {current.stat}
@@ -362,7 +362,7 @@ export function Hero({ slides }: HeroProps) {
                     </div>
                   </motion.div>
                 </AnimatePresence>
-              </div>
+              ) : null}
             </div>
           </div>
         </div>

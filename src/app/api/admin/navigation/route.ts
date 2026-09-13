@@ -1,44 +1,37 @@
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin/session";
+import { parseJsonBody, withErrorHandling } from "@/lib/api/validation";
 import {
   listNavigation,
   replaceNavigation,
 } from "@/lib/cms/navigation-repository";
 import { revalidateStorefront } from "@/lib/cms/revalidate";
+import { navigationPutSchema } from "@/lib/cms/schemas";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+export const GET = withErrorHandling(async (request: Request) => {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
-  const location = searchParams.get("location") as "header" | "footer" | null;
+  const raw = searchParams.get("location");
+  const location = raw === "header" || raw === "footer" ? raw : undefined;
 
-  return NextResponse.json({
-    items: listNavigation(location ?? undefined),
-  });
-}
+  return NextResponse.json({ items: await listNavigation(location) });
+});
 
-export async function PUT(request: Request) {
+export const PUT = withErrorHandling(async (request: Request) => {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as {
-    location: "header" | "footer";
-    items: {
-      id: string;
-      label: string;
-      href: string;
-      parentId?: string | null;
-      sortOrder?: number;
-      enabled?: boolean;
-    }[];
-  };
+  const parsed = await parseJsonBody(request, navigationPutSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
-  replaceNavigation(
+  await replaceNavigation(
     body.location,
     body.items.map((item, index) => ({
       id: item.id,
@@ -47,10 +40,9 @@ export async function PUT(request: Request) {
       parentId: item.parentId ?? null,
       sortOrder: item.sortOrder ?? index,
       enabled: item.enabled ?? true,
-      location: body.location,
     })),
   );
 
   revalidateStorefront();
   return NextResponse.json({ success: true });
-}
+});

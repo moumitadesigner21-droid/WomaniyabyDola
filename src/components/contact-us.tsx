@@ -13,8 +13,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { contactUsContent } from "@/lib/data";
 import { getWhatsAppContactUrl } from "@/lib/format";
+import { contactUsSchema, type ContactUsContent } from "@/lib/cms/content-schemas";
 
-type FaqItem = (typeof contactUsContent.faqs)[number];
+type FaqItem = ContactUsContent["faqs"][number];
 
 const reachIcons = {
   WhatsApp: MessageCircle,
@@ -24,10 +25,10 @@ const reachIcons = {
 } as const;
 
 function FaqAnswer({ faq }: { faq: FaqItem }) {
-  if ("steps" in faq && faq.steps) {
+  if (faq.steps?.length) {
     return (
       <div className="space-y-4">
-        {"intro" in faq && faq.intro ? (
+        {faq.intro ? (
           <p className="text-sm leading-relaxed text-charcoal/80">{faq.intro}</p>
         ) : null}
         <ol className="space-y-3">
@@ -46,13 +47,12 @@ function FaqAnswer({ faq }: { faq: FaqItem }) {
 
   return (
     <div className="space-y-3">
-      {"answer" in faq &&
-        faq.answer?.map((paragraph) => (
+      {faq.answer?.map((paragraph) => (
           <p key={paragraph.slice(0, 40)} className="text-sm leading-relaxed text-charcoal/80">
             {paragraph}
           </p>
         ))}
-      {"list" in faq && faq.list ? (
+      {faq.list?.length ? (
         <ul className="space-y-2 border-l border-gold/40 pl-4">
           {faq.list.map((item) => (
             <li key={item.slice(0, 40)} className="text-sm leading-relaxed text-charcoal/80">
@@ -65,9 +65,9 @@ function FaqAnswer({ faq }: { faq: FaqItem }) {
   );
 }
 
-export function ContactUs() {
+export function ContactUs({ content }: { content?: ContactUsContent }) {
   const { hero, reach, faqEyebrow, faqTitle, formEyebrow, formTitle, formNote, faqs } =
-    contactUsContent;
+    content ?? contactUsSchema.parse(contactUsContent);
 
   const [openFaq, setOpenFaq] = useState<string | null>(faqs[0]?.id ?? null);
   const [form, setForm] = useState({

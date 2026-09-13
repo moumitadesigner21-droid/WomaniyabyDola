@@ -1,0 +1,18 @@
+# Copy to .dev.vars for local development (read by `next dev` via
+# initOpenNextCloudflareForDev and by `wrangler dev`). Never commit .dev.vars.
+# In production set each of these with:  npx wrangler secret put <NAME>
+
+# Bootstraps the first admin user on first login; ignored once admin_users has a row.
+ADMIN_PASSWORD=change-me
+
+# Signs the admin session cookie. Rotate to log every admin out.
+ADMIN_SESSION_SECRET=generate-a-long-random-string
+
+# WhatsApp order notifications (at least one channel)
+WHATSAPP_API_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+CALLMEBOT_API_KEY=
+
+# Email backup notifications (Resend)
+RESEND_API_KEY=
+ORDER_EMAIL_FROM=orders@womaniabydola.com

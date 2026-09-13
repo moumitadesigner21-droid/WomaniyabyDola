@@ -5,7 +5,6 @@ import {
   getCategoryPath,
   getProductCountByCategory,
   isCategorySlug,
-  type CategorySlug,
 } from "@/lib/categories";
 import { collections, isAnchorLink, isExternalLink, type Product } from "@/lib/data";
 

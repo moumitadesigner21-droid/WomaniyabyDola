@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CmsCoupon } from "@/lib/cms/types";
 
 export function AdminOffersPanel() {
@@ -15,15 +15,23 @@ export function AdminOffersPanel() {
   });
   const [message, setMessage] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const response = await fetch("/api/admin/coupons");
     const payload = (await response.json()) as { coupons: CmsCoupon[] };
     setCoupons(payload.coupons);
-  };
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, []);
+    // Initial fetch: the state update happens after `await`, i.e. in a
+    // callback, which is the pattern the set-state-in-effect rule wants.
+    let cancelled = false;
+    void (async () => {
+      if (!cancelled) await load();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();

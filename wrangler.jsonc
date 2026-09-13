@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "womania-by-dola",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "womania-db",
+      "database_id": "6ee20ac4-73de-42ac-ab13-665b829a09fb",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "womania-media"
+    }
+  ],
+  "unsafe": {
+    "bindings": [
+      { "name": "LOGIN_LIMITER", "type": "ratelimit", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } },
+      { "name": "ORDER_LIMITER", "type": "ratelimit", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+      { "name": "QUOTE_LIMITER", "type": "ratelimit", "namespace_id": "1003", "simple": { "limit": 60, "period": 60 } }
+    ]
+  },
+  "vars": {
+    // Public origin; override per environment. Secrets go through `wrangler secret put`.
+    "SITE_URL": "https://womania-by-dola.karao-digital.workers.dev"
+  }
+}

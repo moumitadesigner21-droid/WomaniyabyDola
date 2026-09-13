@@ -3,10 +3,11 @@
 import { ArrowLeft, CheckCircle2, ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCart } from "@/lib/cart";
 import { formatPrice } from "@/lib/format";
-import type { Order, PaymentStatus } from "@/lib/orders/types";
+import type { OrderQuote } from "@/lib/orders/pricing";
+import type { Order } from "@/lib/orders/types";
 
 interface OrderPlacementResult {
   order: Order;
@@ -19,45 +20,119 @@ interface OrderPlacementResult {
   duplicate: boolean;
 }
 
+function makeIdempotencyKey() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function CheckoutContent() {
   const { items, subtotal, itemCount, hydrated, clearCart } = useCart();
-  const idempotencyKey = useRef(
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `order-${Date.now()}`,
-  );
+  const [idempotencyKey] = useState(makeIdempotencyKey);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("COD");
-  const [shipping, setShipping] = useState(0);
-  const [discount, setDiscount] = useState(0);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [couponMessage, setCouponMessage] = useState("");
+  const [quote, setQuote] = useState<OrderQuote | null>(null);
+  const [quoteError, setQuoteError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<OrderPlacementResult | null>(null);
 
+  // `items` only changes reference when the cart mutates, so this is stable
+  // across re-renders and safe to use as an effect dependency.
+  const cartPayload = useMemo(
+    () =>
+      items.map((item) => ({
+        productId: item.productId,
+        slug: item.slug,
+        variantId: item.variantId,
+        size: item.size,
+        quantity: item.quantity,
+      })),
+    [items],
+  );
+
+  const fetchQuote = useCallback(
+    async (couponCode: string | null) => {
+      if (cartPayload.length === 0) return null;
+
+      const response = await fetch("/api/orders/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: cartPayload,
+          couponCode: couponCode ?? undefined,
+        }),
+      });
+      const payload = (await response.json()) as {
+        quote?: OrderQuote;
+        error?: string;
+      };
+      if (!response.ok || !payload.quote) {
+        throw new Error(payload.error ?? "Unable to price your cart.");
+      }
+      return payload.quote;
+    },
+    [cartPayload],
+  );
+
   useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch("/api/store/config");
-        if (!response.ok) return;
-        const payload = (await response.json()) as {
-          flatShippingRate?: number;
-        };
-        setShipping(payload.flatShippingRate ?? 0);
-      } catch {
-        // Keep default shipping at 0
+        const next = await fetchQuote(appliedCoupon);
+        if (!cancelled && next) {
+          setQuote(next);
+          setQuoteError("");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setQuoteError(
+            error instanceof Error ? error.message : "Unable to price your cart.",
+          );
+        }
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, fetchQuote, appliedCoupon]);
 
-  const total = useMemo(
-    () => Math.max(0, subtotal + shipping - discount),
-    [subtotal, shipping, discount],
-  );
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+    setCouponMessage("");
+    try {
+      const next = await fetchQuote(code);
+      if (next) {
+        setQuote(next);
+        setAppliedCoupon(next.couponCode);
+        setCouponMessage(`Coupon ${next.couponCode} applied.`);
+        setQuoteError("");
+      }
+    } catch (error) {
+      setCouponMessage(
+        error instanceof Error ? error.message : "That coupon code is not valid.",
+      );
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput("");
+    setCouponMessage("");
+  };
+
+  const shipping = quote?.shipping ?? 0;
+  const discount = quote?.discount ?? 0;
+  const total = quote?.total ?? Math.max(0, subtotal + shipping - discount);
 
   if (!hydrated) {
     return (
@@ -162,6 +237,11 @@ export function CheckoutContent() {
       return;
     }
 
+    if (quoteError) {
+      setSubmitError(quoteError);
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError("");
 
@@ -175,18 +255,9 @@ export function CheckoutContent() {
           customerEmail: email.trim() || undefined,
           customerAddress: address.trim(),
           notes: notes.trim() || undefined,
-          paymentStatus,
-          shipping,
-          discount,
-          idempotencyKey: idempotencyKey.current,
-          items: items.map((item) => ({
-            productId: item.productId,
-            slug: item.slug,
-            name: item.name,
-            size: item.size,
-            quantity: item.quantity,
-            price: item.price,
-          })),
+          couponCode: appliedCoupon ?? undefined,
+          idempotencyKey,
+          items: cartPayload,
         }),
       });
 
@@ -309,22 +380,15 @@ export function CheckoutContent() {
             />
           </label>
 
-          <label className="block">
-            <span className="mb-2 block text-xs tracking-[0.14em] text-charcoal uppercase">
+          <div className="border border-charcoal/10 bg-ivory/60 px-4 py-3 text-sm text-charcoal">
+            <span className="block text-xs tracking-[0.14em] text-warm-gray uppercase">
               Payment method
             </span>
-            <select
-              value={paymentStatus}
-              onChange={(event) =>
-                setPaymentStatus(event.target.value as PaymentStatus)
-              }
-              className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none focus:border-maroon"
-            >
-              <option value="COD">Cash on Delivery</option>
-              <option value="pending">Online Payment (Pending)</option>
-              <option value="paid">Already Paid</option>
-            </select>
-          </label>
+            <span className="mt-1 block font-medium">Cash on Delivery</span>
+            <span className="mt-0.5 block text-xs text-warm-gray">
+              Pay when your order arrives. We&apos;ll confirm on WhatsApp.
+            </span>
+          </div>
 
           {submitError ? (
             <p className="text-sm text-maroon">{submitError}</p>
@@ -360,7 +424,9 @@ export function CheckoutContent() {
                   <p className="line-clamp-2 text-sm leading-snug text-charcoal">
                     {item.name}
                   </p>
-                  {item.size ? (
+                  {item.variantLabel ? (
+                    <p className="mt-0.5 text-xs text-warm-gray">{item.variantLabel}</p>
+                  ) : item.size ? (
                     <p className="mt-0.5 text-xs text-warm-gray">Size: {item.size}</p>
                   ) : null}
                   <p className="mt-1 text-xs text-warm-gray">
@@ -370,23 +436,83 @@ export function CheckoutContent() {
               </li>
             ))}
           </ul>
+          <div className="mt-5 border-t border-charcoal/10 pt-5">
+            <label className="block text-xs tracking-[0.14em] text-charcoal uppercase">
+              Coupon code
+            </label>
+            {appliedCoupon ? (
+              <div className="mt-2 flex items-center justify-between gap-3 border border-forest/30 bg-forest/5 px-3 py-2 text-sm">
+                <span className="font-medium text-forest">{appliedCoupon}</span>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="text-xs tracking-[0.12em] text-warm-gray uppercase hover:text-maroon"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={couponInput}
+                  onChange={(event) => setCouponInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleApplyCoupon();
+                    }
+                  }}
+                  placeholder="Enter code"
+                  className="min-w-0 flex-1 border border-charcoal/15 bg-ivory px-3 py-2 text-sm uppercase outline-none focus:border-maroon"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleApplyCoupon()}
+                  className="border border-maroon px-4 py-2 text-xs font-semibold tracking-[0.14em] text-maroon uppercase transition-colors hover:bg-maroon hover:text-ivory"
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+            {couponMessage ? (
+              <p
+                className={`mt-2 text-xs ${
+                  appliedCoupon ? "text-forest" : "text-maroon"
+                }`}
+              >
+                {couponMessage}
+              </p>
+            ) : null}
+          </div>
+
           <div className="mt-5 space-y-2 border-t border-charcoal/10 pt-5 text-sm">
             <div className="flex justify-between text-warm-gray">
               <span>Subtotal</span>
-              <span>{formatPrice(subtotal)}</span>
+              <span>{formatPrice(quote?.subtotal ?? subtotal)}</span>
             </div>
             <div className="flex justify-between text-warm-gray">
               <span>Shipping</span>
-              <span>{formatPrice(shipping)}</span>
+              <span>{shipping === 0 ? "Free" : formatPrice(shipping)}</span>
             </div>
-            <div className="flex justify-between text-warm-gray">
-              <span>Discount</span>
-              <span>{formatPrice(discount)}</span>
-            </div>
+            {discount > 0 ? (
+              <div className="flex justify-between text-forest">
+                <span>Discount</span>
+                <span>−{formatPrice(discount)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between font-medium text-maroon">
               <span>Total</span>
               <span>{formatPrice(total)}</span>
             </div>
+            {quote?.freeShippingThreshold && shipping > 0 ? (
+              <p className="pt-1 text-xs text-warm-gray">
+                Add {formatPrice(quote.freeShippingThreshold - (quote.subtotal ?? 0))}{" "}
+                more for free shipping.
+              </p>
+            ) : null}
+            {quoteError ? (
+              <p className="pt-1 text-xs text-maroon">{quoteError}</p>
+            ) : null}
           </div>
         </aside>
       </div>

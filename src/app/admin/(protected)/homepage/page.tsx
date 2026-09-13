@@ -1,5 +1,5 @@
 import { AdminNav } from "@/components/admin/admin-nav";
-import { AdminHomepageEditor } from "@/components/admin/admin-content-editor";
+import { AdminHomepageEditor } from "@/components/admin/editors/homepage-editor";
 
 export default function AdminHomepagePage() {
   return (

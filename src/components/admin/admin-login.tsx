@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 export function AdminLoginForm() {
   const router = useRouter();
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,7 +19,7 @@ export function AdminLoginForm() {
       const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
 
       if (!response.ok) {
@@ -48,11 +49,26 @@ export function AdminLoginForm() {
 
       <label className="mt-8 block">
         <span className="mb-2 block text-xs tracking-[0.14em] text-charcoal uppercase">
+          Username
+        </span>
+        <input
+          type="text"
+          required
+          autoComplete="username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+          className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none focus:border-maroon"
+        />
+      </label>
+
+      <label className="mt-5 block">
+        <span className="mb-2 block text-xs tracking-[0.14em] text-charcoal uppercase">
           Password
         </span>
         <input
           type="password"
           required
+          autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none focus:border-maroon"

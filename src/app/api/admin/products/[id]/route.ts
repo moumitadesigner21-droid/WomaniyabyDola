@@ -1,44 +1,44 @@
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin/session";
+import { parseJsonBody, withErrorHandling } from "@/lib/api/validation";
 import {
   deleteProduct,
   getCmsProductById,
   updateProduct,
 } from "@/lib/cms/products-repository";
+import { deleteOrphanedUploads } from "@/lib/cms/media";
 import { revalidateStorefront } from "@/lib/cms/revalidate";
-import type { CmsProductInput } from "@/lib/cms/types";
+import { productPatchSchema } from "@/lib/cms/schemas";
 
 export const runtime = "nodejs";
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+type Context = { params: Promise<{ id: string }> };
+
+export const GET = withErrorHandling<Context>(async (_request, context) => {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const product = getCmsProductById(id);
+  const product = await getCmsProductById(id);
 
   if (!product) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   return NextResponse.json({ product });
-}
+});
 
-export async function PATCH(
-  request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const PATCH = withErrorHandling<Context>(async (request, context) => {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const parsed = await parseJsonBody(request, productPatchSchema);
+  if (!parsed.ok) return parsed.response;
+
   const { id } = await context.params;
-  const body = (await request.json()) as Partial<CmsProductInput>;
-  const product = updateProduct(id, body);
+  const product = await updateProduct(id, parsed.data);
 
   if (!product) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -46,23 +46,28 @@ export async function PATCH(
 
   revalidateStorefront();
   return NextResponse.json({ product });
-}
+});
 
-export async function DELETE(
-  _request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const DELETE = withErrorHandling<Context>(async (_request, context) => {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const deleted = deleteProduct(id);
+  const existing = await getCmsProductById(id);
+  const deleted = await deleteProduct(id);
 
-  if (!deleted) {
+  if (!deleted || !existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  await deleteOrphanedUploads([
+    existing.image,
+    existing.hoverImage,
+    existing.palluImage,
+    ...existing.images.map((image) => image.url),
+  ]);
 
   revalidateStorefront();
   return NextResponse.json({ success: true });
-}
+});

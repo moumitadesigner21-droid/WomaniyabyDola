@@ -1,8 +1,7 @@
-import { randomUUID } from "crypto";
-import { getDb } from "@/lib/orders/db";
+import { execute, nowIso, queryAll, queryOne, uuid, type Row } from "@/lib/db";
 import type { CmsCoupon } from "@/lib/cms/types";
 
-function rowToCoupon(row: Record<string, unknown>): CmsCoupon {
+function rowToCoupon(row: Row): CmsCoupon {
   return {
     id: String(row.id),
     code: String(row.code),
@@ -19,101 +18,83 @@ function rowToCoupon(row: Record<string, unknown>): CmsCoupon {
   };
 }
 
-export function listCoupons(): CmsCoupon[] {
-  const database = getDb();
-  const rows = database
-    .prepare("SELECT * FROM coupons ORDER BY created_at DESC")
-    .all() as Record<string, unknown>[];
-
+export async function listCoupons(): Promise<CmsCoupon[]> {
+  const rows = await queryAll("SELECT * FROM coupons ORDER BY created_at DESC");
   return rows.map(rowToCoupon);
 }
 
-export function createCoupon(
-  input: Omit<CmsCoupon, "id" | "createdAt">,
-): CmsCoupon {
-  const database = getDb();
-  const id = randomUUID();
-  const createdAt = new Date().toISOString();
-
-  database
-    .prepare(
-      `INSERT INTO coupons (
-        id, code, discount_type, discount_value, min_order_value,
-        valid_from, valid_until, category_slug, product_id, free_shipping, enabled, created_at
-      ) VALUES (
-        @id, @code, @discountType, @discountValue, @minOrderValue,
-        @validFrom, @validUntil, @categorySlug, @productId, @freeShipping, @enabled, @createdAt
-      )`,
-    )
-    .run({
-      id,
-      code: input.code.toUpperCase(),
-      discountType: input.discountType,
-      discountValue: input.discountValue,
-      minOrderValue: input.minOrderValue,
-      validFrom: input.validFrom,
-      validUntil: input.validUntil,
-      categorySlug: input.categorySlug,
-      productId: input.productId,
-      freeShipping: input.freeShipping ? 1 : 0,
-      enabled: input.enabled ? 1 : 0,
-      createdAt,
-    });
-
-  return rowToCoupon(
-    database.prepare("SELECT * FROM coupons WHERE id = ?").get(id) as Record<
-      string,
-      unknown
-    >,
-  );
+export async function getCouponById(id: string): Promise<CmsCoupon | null> {
+  const row = await queryOne("SELECT * FROM coupons WHERE id = ?", id);
+  return row ? rowToCoupon(row) : null;
 }
 
-export function updateCoupon(
+export async function getCouponByCode(code: string): Promise<CmsCoupon | null> {
+  const row = await queryOne(
+    "SELECT * FROM coupons WHERE code = ?",
+    code.trim().toUpperCase(),
+  );
+  return row ? rowToCoupon(row) : null;
+}
+
+export async function createCoupon(
+  input: Omit<CmsCoupon, "id" | "createdAt">,
+): Promise<CmsCoupon> {
+  const id = uuid();
+
+  await execute(
+    `INSERT INTO coupons (
+      id, code, discount_type, discount_value, min_order_value,
+      valid_from, valid_until, category_slug, product_id, free_shipping, enabled, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    input.code.toUpperCase(),
+    input.discountType,
+    input.discountValue,
+    input.minOrderValue,
+    input.validFrom,
+    input.validUntil,
+    input.categorySlug,
+    input.productId,
+    input.freeShipping ? 1 : 0,
+    input.enabled ? 1 : 0,
+    nowIso(),
+  );
+
+  return (await getCouponById(id))!;
+}
+
+export async function updateCoupon(
   id: string,
   input: Partial<Omit<CmsCoupon, "id" | "createdAt">>,
-): CmsCoupon | null {
-  const database = getDb();
-  const existing = database
-    .prepare("SELECT * FROM coupons WHERE id = ?")
-    .get(id) as Record<string, unknown> | undefined;
-
+): Promise<CmsCoupon | null> {
+  const existing = await getCouponById(id);
   if (!existing) return null;
 
-  const merged = { ...rowToCoupon(existing), ...input };
+  const merged = { ...existing, ...input };
 
-  database
-    .prepare(
-      `UPDATE coupons SET
-        code = @code, discount_type = @discountType, discount_value = @discountValue,
-        min_order_value = @minOrderValue, valid_from = @validFrom, valid_until = @validUntil,
-        category_slug = @categorySlug, product_id = @productId,
-        free_shipping = @freeShipping, enabled = @enabled
-      WHERE id = @id`,
-    )
-    .run({
-      id,
-      code: merged.code.toUpperCase(),
-      discountType: merged.discountType,
-      discountValue: merged.discountValue,
-      minOrderValue: merged.minOrderValue,
-      validFrom: merged.validFrom,
-      validUntil: merged.validUntil,
-      categorySlug: merged.categorySlug,
-      productId: merged.productId,
-      freeShipping: merged.freeShipping ? 1 : 0,
-      enabled: merged.enabled ? 1 : 0,
-    });
-
-  return rowToCoupon(
-    database.prepare("SELECT * FROM coupons WHERE id = ?").get(id) as Record<
-      string,
-      unknown
-    >,
+  await execute(
+    `UPDATE coupons SET
+      code = ?, discount_type = ?, discount_value = ?,
+      min_order_value = ?, valid_from = ?, valid_until = ?,
+      category_slug = ?, product_id = ?, free_shipping = ?, enabled = ?
+     WHERE id = ?`,
+    merged.code.toUpperCase(),
+    merged.discountType,
+    merged.discountValue,
+    merged.minOrderValue,
+    merged.validFrom,
+    merged.validUntil,
+    merged.categorySlug,
+    merged.productId,
+    merged.freeShipping ? 1 : 0,
+    merged.enabled ? 1 : 0,
+    id,
   );
+
+  return getCouponById(id);
 }
 
-export function deleteCoupon(id: string): boolean {
-  const database = getDb();
-  const result = database.prepare("DELETE FROM coupons WHERE id = ?").run(id);
-  return result.changes > 0;
+export async function deleteCoupon(id: string): Promise<boolean> {
+  const { changes } = await execute("DELETE FROM coupons WHERE id = ?", id);
+  return changes > 0;
 }

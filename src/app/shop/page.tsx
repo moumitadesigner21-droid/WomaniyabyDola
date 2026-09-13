@@ -6,21 +6,35 @@ import { CategoryPageHero } from "@/components/category-page-hero";
 import { ShopContent } from "@/components/shop-content";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 
+import { JsonLd } from "@/components/json-ld";
 import { getAllCatalogProducts } from "@/lib/catalog-server";
+import { breadcrumbJsonLd, buildPageMetadata, itemListJsonLd } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Shop | Womania by Dola",
-  description:
-    "Shop gamcha sarees, co-ord sets, dresses, shrugs & ethnic wear — handcrafted by Dola in Jalpaiguri.",
-};
+export function generateMetadata() {
+  return buildPageMetadata("shop", {
+    title: "Shop",
+    description:
+      "Shop gamcha sarees, co-ord sets, dresses, shrugs & ethnic wear — handcrafted by Dola in Jalpaiguri.",
+    path: "/shop",
+  });
+}
 
-export default function ShopPage() {
-  const initialProducts = getAllCatalogProducts();
+export default async function ShopPage() {
+  const initialProducts = await getAllCatalogProducts();
 
   return (
     <>
+      <JsonLd
+        data={[
+          breadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            { name: "Shop", path: "/shop" },
+          ]),
+          itemListJsonLd("Shop the Collection", initialProducts),
+        ]}
+      />
       <AnnouncementBar />
       <Header />
       <main>

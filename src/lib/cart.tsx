@@ -20,6 +20,9 @@ export interface CartItem {
   image: string;
   category: string;
   size?: string;
+  /** Set when the product has options; label like "M / Red". */
+  variantId?: string;
+  variantLabel?: string;
   quantity: number;
 }
 
@@ -28,7 +31,10 @@ interface CartContextValue {
   itemCount: number;
   subtotal: number;
   hydrated: boolean;
-  addItem: (product: Product, options?: { size?: string; quantity?: number }) => void;
+  addItem: (
+    product: Product,
+    options?: { size?: string; variantId?: string; quantity?: number },
+  ) => void;
   removeItem: (lineId: string) => void;
   updateQuantity: (lineId: string, quantity: number) => void;
   clearCart: () => void;
@@ -38,7 +44,8 @@ const STORAGE_KEY = "womania-cart-v1";
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-function makeLineId(slug: string, size?: string) {
+function makeLineId(slug: string, variantId?: string, size?: string) {
+  if (variantId) return `${slug}::v:${variantId}`;
   return size ? `${slug}::${size}` : slug;
 }
 
@@ -59,6 +66,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    // Hydrate from localStorage after mount so server and first client render
+    // match (an initializer would read storage during SSR-mismatch territory).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems(readStoredCart());
     setHydrated(true);
   }, []);
@@ -69,10 +79,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items, hydrated]);
 
   const addItem = useCallback(
-    (product: Product, options?: { size?: string; quantity?: number }) => {
-      const size = options?.size?.trim() || undefined;
+    (
+      product: Product,
+      options?: { size?: string; variantId?: string; quantity?: number },
+    ) => {
+      const variant = options?.variantId
+        ? product.variants?.find((v) => v.id === options.variantId)
+        : undefined;
+      const size = variant ? undefined : options?.size?.trim() || undefined;
       const quantity = Math.max(1, options?.quantity ?? 1);
-      const lineId = makeLineId(product.slug, size);
+      const lineId = makeLineId(product.slug, variant?.id, size);
 
       setItems((current) => {
         const existing = current.find((item) => item.lineId === lineId);
@@ -91,10 +107,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
             productId: product.id,
             slug: product.slug,
             name: product.name,
-            price: product.price,
-            image: product.image,
+            price: variant?.price ?? product.price,
+            image: variant?.image ?? product.image,
             category: product.category,
             size,
+            variantId: variant?.id,
+            variantLabel: variant?.label,
             quantity,
           },
         ];

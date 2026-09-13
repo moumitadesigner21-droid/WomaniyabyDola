@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatPrice } from "@/lib/format";
 import type { CmsProduct } from "@/lib/cms/types";
 
@@ -10,15 +11,23 @@ export function AdminProductsPanel() {
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const response = await fetch("/api/admin/products?all=1");
     const payload = (await response.json()) as { products: CmsProduct[] };
     setProducts(payload.products);
-  };
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, []);
+    // Initial fetch: the state update happens after `await`, i.e. in a
+    // callback, which is the pattern the set-state-in-effect rule wants.
+    let cancelled = false;
+    void (async () => {
+      if (!cancelled) await load();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
 
   const filtered = products.filter((product) =>
     product.name.toLowerCase().includes(search.toLowerCase()),
@@ -82,9 +91,11 @@ export function AdminProductsPanel() {
               <tr key={product.id} className="border-b border-charcoal/8">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <img
+                    <Image
                       src={product.image}
                       alt=""
+                      width={40}
+                      height={48}
                       className="h-12 w-10 object-cover"
                     />
                     <div>

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   cmsProductToProduct,
   getCatalogProductBySlug,
@@ -21,31 +22,31 @@ import type { Product } from "@/lib/data";
 import { getSiteContent } from "@/lib/cms/content-repository";
 import type { HeroSlide } from "@/lib/data";
 
-/** All sellable products from CMS, enabled only. Server-only. */
-export function getAllCatalogProducts(): Product[] {
+/** All sellable products from CMS, enabled only. Memoised per request. */
+export const getAllCatalogProducts = cache(async (): Promise<Product[]> => {
   return listEnabledProductsAsCatalog();
+});
+
+export async function getGamchaProducts(group: GamchaGroup = "all"): Promise<Product[]> {
+  return filterGamchaProducts(await getAllCatalogProducts(), group);
 }
 
-export function getGamchaProducts(group: GamchaGroup = "all"): Product[] {
-  return filterGamchaProducts(getAllCatalogProducts(), group);
-}
-
-export function getProductBySlug(slug: string): Product | undefined {
+export const getProductBySlug = cache(async (slug: string): Promise<Product | undefined> => {
   return getCatalogProductBySlug(slug);
-}
+});
 
-export function getProductsByCategory(category: CategorySlug): Product[] {
+export async function getProductsByCategory(category: CategorySlug): Promise<Product[]> {
   if (category === "gamcha") {
     return getGamchaProducts();
   }
 
-  return filterProductsByCategory(getAllCatalogProducts(), category);
+  return filterProductsByCategory(await getAllCatalogProducts(), category);
 }
 
-export function getProductsBySubcategory(
+export async function getProductsBySubcategory(
   category: CategorySlug,
   subcategory: string,
-): Product[] {
+): Promise<Product[]> {
   if (category === "gamcha") {
     const group = gamchaSubcategoryToGroup(subcategory);
     if (!group) return [];
@@ -53,40 +54,42 @@ export function getProductsBySubcategory(
   }
 
   return filterProductsBySubcategory(
-    getAllCatalogProducts(),
+    await getAllCatalogProducts(),
     category,
     subcategory,
   );
 }
 
-export function getBestsellerProducts(): Product[] {
-  const configured = getSiteContent<{ productSlugs?: string[] }>(
+export async function getBestsellerProducts(): Promise<Product[]> {
+  const configured = await getSiteContent<{ productSlugs?: string[] }>(
     "bestsellers_config",
     {},
   );
 
   if (configured.productSlugs?.length) {
+    const all = await getAllCatalogProducts();
+    const bySlug = new Map(all.map((product) => [product.slug, product]));
     const products = configured.productSlugs
-      .map((slug) => getProductBySlug(slug))
-      .filter(Boolean) as Product[];
+      .map((slug) => bySlug.get(slug))
+      .filter((product): product is Product => Boolean(product));
     if (products.length) return products;
   }
 
   return listBestsellerProducts();
 }
 
-export function getFeaturedProducts(): Product[] {
+export async function getFeaturedProducts(): Promise<Product[]> {
   return listFeaturedProducts();
 }
 
-export function getHeroSlides(): HeroSlide[] {
+export async function getHeroSlides(): Promise<HeroSlide[]> {
   return getSiteContent<HeroSlide[]>("hero_slides", []);
 }
 
-export function getProductImages(product: Product): string[] {
-  const cmsProduct = getCmsProductBySlug(product.slug);
+export async function getProductImages(product: Product): Promise<string[]> {
+  const cmsProduct = await getCmsProductBySlug(product.slug);
   if (cmsProduct) {
-    const ordered = cmsProduct.images
+    const ordered = [...cmsProduct.images]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((image) => image.url);
     return [...new Set([product.image, ...ordered].filter(Boolean))];
@@ -96,8 +99,4 @@ export function getProductImages(product: Product): string[] {
   return [...new Set(images.filter(Boolean))];
 }
 
-export {
-  listAllProducts,
-  cmsProductToProduct,
-  getCmsProductBySlug,
-};
+export { listAllProducts, cmsProductToProduct, getCmsProductBySlug };

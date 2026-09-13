@@ -52,25 +52,33 @@ export function ShopContent({
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
+  // Re-sync local filter state when the URL changes (back/forward, header
+  // search). Done during render per React's "adjusting state on prop change"
+  // pattern instead of an effect.
+  const paramsKey = searchParams.toString();
+  const [syncedParamsKey, setSyncedParamsKey] = useState(paramsKey);
+  if (paramsKey !== syncedParamsKey) {
+    setSyncedParamsKey(paramsKey);
+    setCategory(getInitialCategory(searchParams));
+    setSearch(searchParams.get("q") ?? "");
+  }
+
   useEffect(() => {
+    // Legacy `?category=` links redirect to the canonical category route.
     const legacyCategory = searchParams.get("category");
     if (!legacyCategory) return;
 
     const normalized = normalizeCategorySlug(legacyCategory);
-    if (normalized) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("category");
-      const query = params.toString();
-      router.replace(
-        query
-          ? `${getCategoryPath(normalized)}?${query}`
-          : getCategoryPath(normalized),
-      );
-      return;
-    }
+    if (!normalized) return;
 
-    setCategory(getInitialCategory(searchParams));
-    setSearch(searchParams.get("q") ?? "");
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("category");
+    const query = params.toString();
+    router.replace(
+      query
+        ? `${getCategoryPath(normalized)}?${query}`
+        : getCategoryPath(normalized),
+    );
   }, [searchParams, router]);
 
   const handleCategorySelect = (next: string) => {

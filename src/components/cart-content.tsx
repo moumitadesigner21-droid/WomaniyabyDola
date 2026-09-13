@@ -67,7 +67,9 @@ export function CartContent() {
                     >
                       {item.name}
                     </Link>
-                    {item.size ? (
+                    {item.variantLabel ? (
+                      <p className="mt-1 text-xs text-warm-gray">{item.variantLabel}</p>
+                    ) : item.size ? (
                       <p className="mt-1 text-xs text-warm-gray">Size: {item.size}</p>
                     ) : null}
                   </div>

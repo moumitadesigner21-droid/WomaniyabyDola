@@ -5,7 +5,7 @@ import { Header } from "@/components/header";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 
 export const metadata = {
-  title: "Checkout | Womania by Dola",
+  title: "Checkout",
   description: "Complete your Womania order securely on our website.",
 };
 

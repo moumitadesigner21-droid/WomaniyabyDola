@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { getSocial, normalizeWhatsAppNumber } from "@/lib/site-chrome";
 
-export function WhatsAppButton() {
+export async function WhatsAppButton() {
+  const number = normalizeWhatsAppNumber((await getSocial()).whatsappNumber);
+  if (!number) return null;
+
   return (
     <Link
-      href="https://wa.me/919775301488"
+      href={`https://wa.me/${number}`}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Chat on WhatsApp"

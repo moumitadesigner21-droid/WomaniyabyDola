@@ -6,13 +6,10 @@ import { CategoryContent } from "@/components/category-content";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { WhatsAppButton } from "@/components/whatsapp-button";
-import {
-  categories,
-  getCategoryBySlug,
-  getCategoryLabel,
-  getSubcategoryLabel,
-  isCategorySlug,
-} from "@/lib/categories";
+import { JsonLd } from "@/components/json-ld";
+import { isCategorySlug } from "@/lib/categories";
+import { getCategory } from "@/lib/cms/categories-repository";
+import { breadcrumbJsonLd, buildCategoryMetadata, itemListJsonLd } from "@/lib/seo";
 import {
   getProductsByCategory,
   getProductsBySubcategory,
@@ -20,38 +17,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export function generateStaticParams() {
-  const params: { category: string; subcategory: string }[] = [];
-
-  for (const category of categories) {
-    for (const subcategory of category.subcategories) {
-      if (getProductsBySubcategory(category.slug, subcategory.slug).length > 0) {
-        params.push({
-          category: category.slug,
-          subcategory: subcategory.slug,
-        });
-      }
-    }
-  }
-
-  return params;
-}
-
 export async function generateMetadata({
   params,
 }: PageProps<"/category/[category]/[subcategory]">) {
   const { category: categorySlug, subcategory } = await params;
-
   if (!isCategorySlug(categorySlug)) {
-    return { title: "Category Not Found | Womania by Dola" };
+    return { title: "Category Not Found" };
   }
-
-  const label = getSubcategoryLabel(categorySlug, subcategory);
-
-  return {
-    title: `${label} | ${getCategoryLabel(categorySlug)} | Womania by Dola`,
-    description: `Shop ${label.toLowerCase()} from Womania by Dola.`,
-  };
+  const category = await getCategory(categorySlug);
+  const sub = category?.subcategories.find((item) => item.slug === subcategory);
+  if (!category || !sub) return { title: "Category Not Found" };
+  return buildCategoryMetadata(category, sub);
 }
 
 export default async function SubcategoryPage({
@@ -63,24 +39,37 @@ export default async function SubcategoryPage({
     notFound();
   }
 
-  const category = getCategoryBySlug(categorySlug);
+  const category = await getCategory(categorySlug);
   const subcategoryDef = category?.subcategories.find(
     (item) => item.slug === subcategory,
   );
 
-  if (!category || !subcategoryDef) {
+  if (!category || !category.enabled || !subcategoryDef) {
     notFound();
   }
 
-  if (getProductsBySubcategory(categorySlug, subcategory).length === 0) {
+  const [categoryProducts, initialProducts] = await Promise.all([
+    getProductsByCategory(categorySlug),
+    getProductsBySubcategory(categorySlug, subcategory),
+  ]);
+
+  if (initialProducts.length === 0) {
     notFound();
   }
-
-  const categoryProducts = getProductsByCategory(categorySlug);
-  const initialProducts = getProductsBySubcategory(categorySlug, subcategory);
 
   return (
     <>
+      <JsonLd
+        data={[
+          breadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            { name: "Shop", path: "/shop" },
+            { name: category.name, path: `/category/${category.slug}` },
+            { name: subcategoryDef.name, path: `/category/${category.slug}/${subcategoryDef.slug}` },
+          ]),
+          itemListJsonLd(`${subcategoryDef.name} · ${category.name}`, initialProducts),
+        ]}
+      />
       <AnnouncementBar />
       <Header />
       <main>
@@ -88,7 +77,7 @@ export default async function SubcategoryPage({
           category={categorySlug}
           eyebrow={category.name}
           title={subcategoryDef.name}
-          description={category.description}
+          description={category.description ?? ""}
         />
 
         <section className="bg-ivory py-12 lg:py-16">

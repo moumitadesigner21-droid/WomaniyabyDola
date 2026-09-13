@@ -5,8 +5,12 @@ import {
 } from "@/lib/cms/products-repository";
 import type { DashboardStats } from "@/lib/cms/types";
 
-export function getDashboardStats(): DashboardStats {
-  const orders = listOrders();
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const [orders, lowStockProducts, outOfStockProducts] = await Promise.all([
+    listOrders(),
+    listLowStockProducts(),
+    listOutOfStockProducts(),
+  ]);
 
   const totalOrders = orders.length;
   const newOrders = orders.filter((order) => order.orderStatus === "new").length;
@@ -26,8 +30,8 @@ export function getDashboardStats(): DashboardStats {
     pendingOrders,
     completedOrders,
     revenue,
-    lowStockProducts: listLowStockProducts(),
-    outOfStockProducts: listOutOfStockProducts(),
+    lowStockProducts,
+    outOfStockProducts,
     recentOrders: orders.slice(0, 8).map((order) => ({
       id: order.id,
       orderNumber: order.orderNumber,

@@ -19,7 +19,7 @@ function paymentLabel(status: string): string {
 function buildItemsBlock(order: Order) {
   return order.items
     .map((item, index) => {
-      const variant = item.size ? `Size: ${item.size}` : "Standard";
+      const variant = item.variantLabel ?? (item.size ? `Size: ${item.size}` : "Standard");
       return [
         `${index + 1}. ${item.name}`,
         `   Variant: ${variant}`,
@@ -44,6 +44,7 @@ function applyTemplate(template: string, order: Order) {
     discount: formatPrice(order.discount),
     total: formatPrice(order.total),
     paymentStatus: paymentLabel(order.paymentStatus),
+    couponCode: order.couponCode ?? "",
   };
 
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) =>
@@ -51,8 +52,8 @@ function applyTemplate(template: string, order: Order) {
   );
 }
 
-export function formatCustomerWhatsAppMessage(order: Order): string {
-  const { template } = getCustomerWhatsAppTemplate();
+export async function formatCustomerWhatsAppMessage(order: Order): Promise<string> {
+  const { template } = await getCustomerWhatsAppTemplate();
 
   if (template.trim()) {
     return applyTemplate(template, order);
@@ -83,8 +84,8 @@ export function formatCustomerWhatsAppMessage(order: Order): string {
   return lines.join("\n");
 }
 
-export function formatOwnerWhatsAppMessage(order: Order): string {
-  const { template } = getWhatsAppTemplate();
+export async function formatOwnerWhatsAppMessage(order: Order): Promise<string> {
+  const { template } = await getWhatsAppTemplate();
 
   if (template.trim()) {
     return applyTemplate(template, order);

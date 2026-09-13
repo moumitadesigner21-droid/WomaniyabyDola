@@ -1,12 +1,17 @@
+import { getAnnouncement } from "@/lib/site-chrome";
+
 interface AnnouncementBarProps {
   enabled?: boolean;
   text?: string;
 }
 
-export function AnnouncementBar({
-  enabled = true,
-  text = "",
-}: AnnouncementBarProps) {
+/** Reads the CMS `announcement_bar` blob unless explicit props are passed. */
+export async function AnnouncementBar(props: AnnouncementBarProps) {
+  const { enabled, text } =
+    props.enabled === undefined && props.text === undefined
+      ? await getAnnouncement()
+      : { enabled: props.enabled ?? true, text: props.text ?? "" };
+
   if (!enabled || !text) return null;
 
   return (

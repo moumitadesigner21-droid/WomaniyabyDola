@@ -1,81 +1,105 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getClientIp, rateLimit } from "@/lib/api/rate-limit";
+import { parseJsonBody } from "@/lib/api/validation";
 import {
   createOrder,
   getOrderById,
   getSettings,
+  getShippingPaymentConfig,
   listOrders,
+  OutOfStockError,
   updateOrderNotificationStatus,
 } from "@/lib/orders/repository";
+import { PricingError, quoteOrder } from "@/lib/orders/pricing";
+import { orderItemSchema } from "@/lib/orders/schemas";
 import { sendOwnerEmailNotification } from "@/lib/orders/email";
 import {
   sendCustomerWhatsAppNotification,
   sendOwnerWhatsAppNotification,
 } from "@/lib/orders/whatsapp";
-import type {
-  CreateOrderInput,
-  OrderItemInput,
-  PaymentStatus,
-} from "@/lib/orders/types";
 import { isAdminAuthenticated } from "@/lib/admin/session";
 
 export const runtime = "nodejs";
 
+const createOrderSchema = z.object({
+  customerName: z.string().trim().min(2, "Please enter your name.").max(120),
+  customerPhone: z
+    .string()
+    .trim()
+    .regex(/^\+?[\d\s-]{10,15}$/, "Please enter a valid phone number."),
+  customerEmail: z
+    .string()
+    .trim()
+    .email("Please enter a valid email address.")
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+  customerAddress: z
+    .string()
+    .trim()
+    .min(10, "Please enter your full delivery address.")
+    .max(1000),
+  notes: z.string().trim().max(1000).optional(),
+  couponCode: z.string().trim().max(40).optional(),
+  idempotencyKey: z.string().trim().min(8).max(100),
+  items: z.array(orderItemSchema).min(1, "Your cart is empty.").max(50),
+});
+
 export async function POST(request: Request) {
+  const limiter = await rateLimit("ORDER_LIMITER", getClientIp(request));
+  if (!limiter.allowed) {
+    return NextResponse.json(
+      { error: "Too many orders from this connection. Please try again shortly." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limiter.retryAfterSeconds) },
+      },
+    );
+  }
+
+  const parsed = await parseJsonBody(request, createOrderSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+
   try {
-    const body = (await request.json()) as {
-      customerName?: string;
-      customerPhone?: string;
-      customerEmail?: string;
-      customerAddress?: string;
-      notes?: string;
-      paymentStatus?: PaymentStatus;
-      shipping?: number;
-      discount?: number;
-      items?: OrderItemInput[];
-      idempotencyKey?: string;
-    };
-
-    if (
-      !body.customerName?.trim() ||
-      !body.customerPhone?.trim() ||
-      !body.idempotencyKey?.trim() ||
-      !body.items?.length
-    ) {
-      const missing: string[] = [];
-      if (!body.customerName?.trim()) missing.push("customer name");
-      if (!body.customerPhone?.trim()) missing.push("phone number");
-      if (!body.idempotencyKey?.trim()) missing.push("order reference");
-      if (!body.items?.length) missing.push("cart items");
-
+    const config = await getShippingPaymentConfig();
+    if (!config.codEnabled) {
       return NextResponse.json(
-        {
-          error: `Missing required order fields: ${missing.join(", ")}.`,
-        },
-        { status: 400 },
+        { error: "Ordering is temporarily unavailable. Please contact us on WhatsApp." },
+        { status: 503 },
       );
     }
 
-    const input: CreateOrderInput = {
-      customerName: body.customerName.trim(),
-      customerPhone: body.customerPhone.trim(),
-      customerEmail: body.customerEmail?.trim(),
-      customerAddress: body.customerAddress?.trim(),
-      notes: body.notes?.trim(),
-      paymentStatus: body.paymentStatus ?? "COD",
-      shipping: body.shipping,
-      discount: body.discount,
-      items: body.items.map((item) => ({
+    // Authoritative totals come from the catalog, never from the client.
+    const quote = await quoteOrder(body.items, body.couponCode);
+
+    const result = await createOrder({
+      customerName: body.customerName,
+      customerPhone: body.customerPhone,
+      customerEmail: body.customerEmail || undefined,
+      customerAddress: body.customerAddress,
+      notes: body.notes || undefined,
+      // Cash on delivery is the only payment method offered; the admin can
+      // mark an order paid later from /admin/orders.
+      paymentStatus: "COD",
+      items: quote.items.map((item) => ({
         productId: item.productId,
         slug: item.slug,
         name: item.name,
         size: item.size,
-        quantity: Math.max(1, item.quantity),
+        variantId: item.variantId,
+        variantLabel: item.variantLabel,
+        quantity: item.quantity,
         price: item.price,
       })),
-      idempotencyKey: body.idempotencyKey.trim(),
-    };
-
-    const result = createOrder(input);
+      subtotal: quote.subtotal,
+      shipping: quote.shipping,
+      discount: quote.discount,
+      total: quote.total,
+      couponCode: quote.couponCode,
+      idempotencyKey: body.idempotencyKey,
+    });
 
     if (result.duplicate) {
       return NextResponse.json({
@@ -90,7 +114,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const settings = getSettings();
+    const settings = await getSettings();
     let whatsappSent = false;
     let whatsappError: string | null = null;
     let customerWhatsappSent = false;
@@ -106,7 +130,7 @@ export async function POST(request: Request) {
       whatsappSent = whatsapp.success;
       whatsappError = whatsapp.error;
 
-      updateOrderNotificationStatus(result.order.id, {
+      await updateOrderNotificationStatus(result.order.id, {
         whatsappNotified: whatsapp.success,
         whatsappError: whatsapp.error,
       });
@@ -119,7 +143,7 @@ export async function POST(request: Request) {
       customerWhatsappSent = customerWhatsapp.success;
       customerWhatsappError = customerWhatsapp.error;
 
-      updateOrderNotificationStatus(result.order.id, {
+      await updateOrderNotificationStatus(result.order.id, {
         customerWhatsappNotified: customerWhatsapp.success,
         customerWhatsappError: customerWhatsapp.error,
       });
@@ -133,14 +157,14 @@ export async function POST(request: Request) {
       emailSent = email.success;
       emailError = email.error;
 
-      updateOrderNotificationStatus(result.order.id, {
+      await updateOrderNotificationStatus(result.order.id, {
         emailNotified: email.success,
         emailError: email.error,
       });
     }
 
     const order =
-      getOrderById(result.order.id) ?? {
+      (await getOrderById(result.order.id)) ?? {
         ...result.order,
         whatsappNotified: whatsappSent,
         whatsappError,
@@ -161,6 +185,10 @@ export async function POST(request: Request) {
       duplicate: false,
     });
   } catch (error) {
+    if (error instanceof PricingError || error instanceof OutOfStockError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     console.error("Order creation failed:", error);
     return NextResponse.json(
       { error: "Failed to place order. Please try again." },
@@ -184,6 +212,6 @@ export async function GET(request: Request) {
     | "cancelled"
     | undefined;
 
-  const orders = listOrders({ search, status });
+  const orders = await listOrders({ search, status });
   return NextResponse.json({ orders });
 }

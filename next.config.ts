@@ -1,12 +1,15 @@
-import path from "path";
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+
+// Gives `next dev` access to the Cloudflare bindings declared in wrangler.jsonc
+// (local D1/R2 under .wrangler/state) via getCloudflareContext().
+initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
-  turbopack: {
-    root: path.join(__dirname),
-  },
   images: {
+    // Cloudflare's image resizing is not on the free plan; assets in public/
+    // are pre-sized and served as-is.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",

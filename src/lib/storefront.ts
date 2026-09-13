@@ -1,19 +1,26 @@
 import { getSiteContent } from "@/lib/cms/content-repository";
-import { getBestsellerProducts, getHeroSlides } from "@/lib/catalog-server";
+import {
+  getBestsellerProducts,
+  getFeaturedProducts,
+  getHeroSlides,
+} from "@/lib/catalog-server";
+import { mergeHomepageSections } from "@/lib/cms/content-schemas";
+import { listNewProducts } from "@/lib/cms/products-repository";
 import type { HomepageSection } from "@/lib/cms/types";
 
-export function getHomepageSections(): HomepageSection[] {
-  return getSiteContent<HomepageSection[]>("homepage_sections", []);
+export async function getHomepageSections(): Promise<HomepageSection[]> {
+  const stored = await getSiteContent<HomepageSection[]>("homepage_sections", []);
+  return mergeHomepageSections(stored);
 }
 
-export function getAnnouncementBar() {
+export async function getAnnouncementBar() {
   return getSiteContent<{ enabled: boolean; text: string }>("announcement_bar", {
     enabled: false,
     text: "",
   });
 }
 
-export function getCollectionBanners() {
+export async function getCollectionBanners() {
   return getSiteContent<
     {
       title: string;
@@ -25,79 +32,117 @@ export function getCollectionBanners() {
   >("collection_banners", []);
 }
 
-export function getShopCollections() {
+export async function getShopCollections() {
   return getSiteContent("collections", []);
 }
 
-export function getHowWeWorkSteps() {
+export async function getHowWeWorkSteps() {
   return getSiteContent("how_we_work", []);
 }
 
-export function getTestimonials() {
+export async function getTestimonials() {
   return getSiteContent("testimonials", []);
 }
 
-export function getVoicesGallery() {
+export async function getVoicesGallery() {
   return getSiteContent("voices_gallery", null);
 }
 
-export function getAboutUsContent() {
+export async function getAboutUsContent() {
   return getSiteContent("about_us", null);
 }
 
-export function getContactUsContent() {
+export async function getContactUsContent() {
   return getSiteContent("contact_us", null);
 }
 
-export function getStoreContact() {
+export async function getStoreContact() {
   return getSiteContent("store_contact", null);
 }
 
-export function getSiteAppearance() {
+export async function getSiteAppearance() {
   return getSiteContent("appearance", null);
 }
 
-export function getSiteSeo() {
+export async function getSiteSeo() {
   return getSiteContent("seo", null);
 }
 
-export function getSiteSocial() {
+export async function getSiteSocial() {
   return getSiteContent("social", null);
 }
 
-export function getPolicies() {
+export async function getPolicies() {
   return getSiteContent("policies", null);
 }
 
-export function getShippingPaymentSettings() {
+export async function getShippingPaymentSettings() {
   return getSiteContent("shipping_payment", null);
 }
 
-export function getWhatsAppTemplate() {
+export async function getWhatsAppTemplate() {
   return getSiteContent<{ template: string }>("whatsapp_template", {
     template: "",
   });
 }
 
-export function getCustomerWhatsAppTemplate() {
+export async function getCustomerWhatsAppTemplate() {
   return getSiteContent<{ template: string }>("customer_whatsapp_template", {
     template: "",
   });
 }
 
-export function getHomepageData() {
-  const sections = getHomepageSections()
+export async function getHomepageData() {
+  const [
+    allSections,
+    announcement,
+    heroSlides,
+    collectionBanners,
+    collections,
+    bestsellers,
+    featured,
+    howWeWork,
+    testimonials,
+    newArrivals,
+    aboutUs,
+    voices,
+    shippingPayment,
+    social,
+  ] = await Promise.all([
+    getHomepageSections(),
+    getAnnouncementBar(),
+    getHeroSlides(),
+    getCollectionBanners(),
+    getShopCollections(),
+    getBestsellerProducts(),
+    getFeaturedProducts(),
+    getHowWeWorkSteps(),
+    getTestimonials(),
+    listNewProducts(8),
+    getAboutUsContent(),
+    getVoicesGallery(),
+    getShippingPaymentSettings(),
+    getSiteSocial(),
+  ]);
+
+  const sections = allSections
     .filter((section) => section.enabled)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   return {
     sections,
-    announcement: getAnnouncementBar(),
-    heroSlides: getHeroSlides(),
-    collectionBanners: getCollectionBanners(),
-    collections: getShopCollections(),
-    bestsellers: getBestsellerProducts(),
-    howWeWork: getHowWeWorkSteps(),
-    testimonials: getTestimonials(),
+    announcement,
+    heroSlides,
+    collectionBanners,
+    collections,
+    bestsellers,
+    featured,
+    howWeWork,
+    testimonials,
+    newArrivals,
+    aboutUs,
+    voices,
+    shippingPayment,
+    social,
   };
 }

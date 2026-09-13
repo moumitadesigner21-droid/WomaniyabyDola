@@ -34,7 +34,7 @@ export async function sendWhatsAppText(
     return {
       success: false,
       error:
-        "WhatsApp not configured. Add Meta Cloud API credentials or CALLMEBOT_API_KEY to .env.local.",
+        "WhatsApp not configured. Add Meta Cloud API credentials or CALLMEBOT_API_KEY as a Worker secret.",
     };
   }
 
@@ -153,7 +153,7 @@ export async function sendOwnerWhatsAppNotification(
   order: Order,
   ownerNumber: string,
 ): Promise<{ success: boolean; error: string | null }> {
-  return sendWhatsAppText(ownerNumber, formatOwnerWhatsAppMessage(order));
+  return sendWhatsAppText(ownerNumber, await formatOwnerWhatsAppMessage(order));
 }
 
 export async function sendCustomerWhatsAppNotification(
@@ -165,6 +165,6 @@ export async function sendCustomerWhatsAppNotification(
 
   return sendWhatsAppText(
     order.customerPhone,
-    formatCustomerWhatsAppMessage(order),
+    await formatCustomerWhatsAppMessage(order),
   );
 }

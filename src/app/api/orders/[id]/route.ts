@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { isAdminAuthenticated } from "@/lib/admin/session";
+import { parseJsonBody } from "@/lib/api/validation";
 import {
   getOrderById,
   updateOrderStatus,
 } from "@/lib/orders/repository";
-import type { OrderStatus, PaymentStatus } from "@/lib/orders/types";
+
+const orderPatchSchema = z.object({
+  orderStatus: z.enum(["new", "pending", "completed", "cancelled"]).optional(),
+  paymentStatus: z.enum(["COD", "paid", "pending"]).optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -18,7 +24,7 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const order = getOrderById(id);
+  const order = await getOrderById(id);
 
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -36,13 +42,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await context.params;
-  const body = (await request.json()) as {
-    orderStatus?: OrderStatus;
-    paymentStatus?: PaymentStatus;
-  };
+  const parsed = await parseJsonBody(request, orderPatchSchema);
+  if (!parsed.ok) return parsed.response;
 
-  const order = updateOrderStatus(id, body);
+  const { id } = await context.params;
+  const order = await updateOrderStatus(id, parsed.data);
 
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });

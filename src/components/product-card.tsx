@@ -75,7 +75,10 @@ export function ProductCard({
     !isSkirtProduct &&
     !isOutfitProduct &&
     (product.portrait ?? product.category === "shrug");
-  const hasSizes = Boolean(product.sizes?.length);
+  const hasOptions = Boolean(product.variants?.length);
+  // Legacy size-only products can pick a size on the card; option products go to the page.
+  const hasSizes = !hasOptions && Boolean(product.sizes?.length);
+  const soldOut = product.inStock === false;
   const [selectedSize, setSelectedSize] = useState(
     () => product.sizes?.[0] ?? "",
   );
@@ -144,6 +147,11 @@ export function ProductCard({
           </div>
         </Link>
         <div className="pointer-events-none absolute top-3 left-3 z-10 flex flex-col gap-1.5">
+          {soldOut && (
+            <span className="bg-charcoal px-2 py-1 text-[9px] font-medium tracking-[0.15em] text-ivory uppercase">
+              Sold Out
+            </span>
+          )}
           {product.isNew && (
             <span className="bg-maroon px-2 py-1 text-[9px] font-medium tracking-[0.15em] text-ivory uppercase">
               New
@@ -164,13 +172,15 @@ export function ProductCard({
             <Heart className="h-4 w-4 text-charcoal" />
           </button>
         </div>
-        <Link
-          href={hasSizes ? sizedProductUrl : productUrl}
-          className="absolute right-0 bottom-0 left-0 z-20 flex translate-y-full items-center justify-center gap-2 bg-maroon/90 py-3 text-xs tracking-widest text-ivory uppercase transition-transform group-hover:translate-y-0"
-        >
-          <ShoppingBag className="h-4 w-4" />
-          {hasSizes ? "Select Options" : "Buy Now"}
-        </Link>
+        {!soldOut && (
+          <Link
+            href={hasSizes ? sizedProductUrl : productUrl}
+            className="absolute right-0 bottom-0 left-0 z-20 flex translate-y-full items-center justify-center gap-2 bg-maroon/90 py-3 text-xs tracking-widest text-ivory uppercase transition-transform group-hover:translate-y-0"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {hasSizes || hasOptions ? "Select Options" : "Buy Now"}
+          </Link>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col">
@@ -191,7 +201,15 @@ export function ProductCard({
           />
         )}
 
-        <p className="mt-2 font-medium text-maroon">{formatPrice(product.price)}</p>
+        <p className="mt-2 font-medium text-maroon">
+          {hasOptions ? <span className="mr-1 text-xs font-normal text-warm-gray">from</span> : null}
+          {formatPrice(product.price)}
+          {product.compareAtPrice ? (
+            <span className="ml-2 text-xs font-normal text-warm-gray line-through">
+              {formatPrice(product.compareAtPrice)}
+            </span>
+          ) : null}
+        </p>
 
         {product.dimensions && (
           <p className="mt-1 text-xs leading-relaxed text-warm-gray">
@@ -204,13 +222,22 @@ export function ProductCard({
           </p>
         )}
 
-        <Link
-          href={hasSizes ? sizedProductUrl : productUrl}
-          className="mt-auto inline-flex min-h-[42px] items-center justify-center gap-2 border border-maroon bg-maroon px-4 py-2.5 text-[10px] font-semibold tracking-[0.16em] text-ivory uppercase transition-colors hover:bg-maroon-dark"
-        >
-          <ShoppingBag className="h-4 w-4" />
-          {hasSizes ? "View Product" : "Buy Now"}
-        </Link>
+        {soldOut ? (
+          <Link
+            href={productUrl}
+            className="mt-auto inline-flex min-h-[42px] items-center justify-center gap-2 border border-charcoal/20 bg-ivory px-4 py-2.5 text-[10px] font-semibold tracking-[0.16em] text-warm-gray uppercase"
+          >
+            Sold Out
+          </Link>
+        ) : (
+          <Link
+            href={hasSizes ? sizedProductUrl : productUrl}
+            className="mt-auto inline-flex min-h-[42px] items-center justify-center gap-2 border border-maroon bg-maroon px-4 py-2.5 text-[10px] font-semibold tracking-[0.16em] text-ivory uppercase transition-colors hover:bg-maroon-dark"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {hasSizes || hasOptions ? "View Product" : "Buy Now"}
+          </Link>
+        )}
       </div>
     </article>
   );

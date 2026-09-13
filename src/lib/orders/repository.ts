@@ -1,5 +1,16 @@
-import { randomUUID } from "crypto";
-import { getDb } from "@/lib/orders/db";
+import { cache } from "react";
+import { getSiteContent, upsertSiteContent } from "@/lib/cms/content-repository";
+import type { ShippingPaymentSettings } from "@/lib/cms/types";
+import {
+  batch,
+  execute,
+  nowIso,
+  queryAll,
+  queryOne,
+  stmt,
+  uuid,
+  type Row,
+} from "@/lib/db";
 import type {
   CreateOrderInput,
   CreateOrderResult,
@@ -7,10 +18,11 @@ import type {
   OrderItem,
   OrderStatus,
   PaymentStatus,
+  ShippingPaymentConfig,
   StoreSettings,
 } from "@/lib/orders/types";
 
-function rowToOrder(row: Record<string, unknown>, items: OrderItem[]): Order {
+function rowToOrder(row: Row, items: OrderItem[]): Order {
   return {
     id: String(row.id),
     orderNumber: String(row.order_number),
@@ -23,6 +35,7 @@ function rowToOrder(row: Record<string, unknown>, items: OrderItem[]): Order {
     shipping: Number(row.shipping),
     discount: Number(row.discount),
     total: Number(row.total),
+    couponCode: row.coupon_code ? String(row.coupon_code) : null,
     paymentStatus: row.payment_status as PaymentStatus,
     orderStatus: row.order_status as OrderStatus,
     whatsappNotified: Boolean(row.whatsapp_notified),
@@ -39,116 +52,165 @@ function rowToOrder(row: Record<string, unknown>, items: OrderItem[]): Order {
   };
 }
 
-function getOrderItems(orderId: string): OrderItem[] {
-  const database = getDb();
-  const rows = database
-    .prepare(
-      `SELECT id, order_id, product_id, slug, name, size, quantity, price
-       FROM order_items WHERE order_id = ? ORDER BY id`,
-    )
-    .all(orderId) as Record<string, unknown>[];
-
-  return rows.map((row) => ({
+function rowToItem(row: Row): OrderItem {
+  return {
     id: Number(row.id),
     orderId: String(row.order_id),
     productId: row.product_id ? String(row.product_id) : null,
     slug: row.slug ? String(row.slug) : null,
     name: String(row.name),
     size: row.size ? String(row.size) : null,
+    variantId: row.variant_id ? String(row.variant_id) : null,
+    variantLabel: row.variant_label ? String(row.variant_label) : null,
     quantity: Number(row.quantity),
     price: Number(row.price),
-  }));
+  };
 }
 
-function generateOrderNumber(): string {
-  const database = getDb();
+/** Attaches items to many orders with a single query. */
+async function hydrateOrders(rows: Row[]): Promise<Order[]> {
+  if (!rows.length) return [];
+  const ids = rows.map((row) => String(row.id));
+  const itemsByOrder = new Map<string, OrderItem[]>();
+
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const itemRows = await queryAll(
+      `SELECT id, order_id, product_id, slug, name, size, variant_id, variant_label, quantity, price
+       FROM order_items WHERE order_id IN (${chunk.map(() => "?").join(", ")})
+       ORDER BY id`,
+      ...chunk,
+    );
+    for (const row of itemRows) {
+      const item = rowToItem(row);
+      const list = itemsByOrder.get(item.orderId) ?? [];
+      list.push(item);
+      itemsByOrder.set(item.orderId, list);
+    }
+  }
+
+  return rows.map((row) => rowToOrder(row, itemsByOrder.get(String(row.id)) ?? []));
+}
+
+async function nextOrderNumber(): Promise<string> {
   const today = new Date();
   const datePart = [
     today.getFullYear(),
     String(today.getMonth() + 1).padStart(2, "0"),
     String(today.getDate()).padStart(2, "0"),
   ].join("");
-
   const prefix = `WD-${datePart}`;
-  const last = database
-    .prepare(
-      "SELECT order_number FROM orders WHERE order_number LIKE ? ORDER BY order_number DESC LIMIT 1",
-    )
-    .get(`${prefix}-%`) as { order_number: string } | undefined;
+
+  const last = await queryOne<{ order_number: string }>(
+    "SELECT order_number FROM orders WHERE order_number LIKE ? ORDER BY order_number DESC LIMIT 1",
+    `${prefix}-%`,
+  );
 
   let sequence = 1;
   if (last?.order_number) {
-    const parts = last.order_number.split("-");
-    const lastSeq = Number.parseInt(parts.at(-1) ?? "0", 10);
+    const lastSeq = Number.parseInt(last.order_number.split("-").at(-1) ?? "0", 10);
     if (!Number.isNaN(lastSeq)) sequence = lastSeq + 1;
   }
 
   return `${prefix}-${String(sequence).padStart(4, "0")}`;
 }
 
-export function getSettings(): StoreSettings {
-  const database = getDb();
-  const rows = database
-    .prepare("SELECT key, value FROM settings")
-    .all() as { key: string; value: string }[];
-
+export const getSettings = cache(async function getSettings(): Promise<StoreSettings> {
+  const rows = await queryAll<{ key: string; value: string }>(
+    "SELECT key, value FROM settings",
+  );
   const map = new Map(rows.map((row) => [row.key, row.value]));
 
   return {
-    ownerWhatsappNumber:
-      map.get("owner_whatsapp_number") ?? "919775301488",
-    orderEmail:
-      map.get("order_email") ?? "womaniadesignstudio@gmail.com",
+    ownerWhatsappNumber: map.get("owner_whatsapp_number") ?? "919775301488",
+    orderEmail: map.get("order_email") ?? "womaniadesignstudio@gmail.com",
     flatShippingRate: Number(map.get("flat_shipping_rate") ?? "0"),
   };
-}
+});
 
-export function updateSettings(
+export async function updateSettings(
   partial: Partial<StoreSettings>,
-): StoreSettings {
-  const database = getDb();
-  const upsert = database.prepare(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-  );
+): Promise<StoreSettings> {
+  const upsert = (key: string, value: string) =>
+    stmt(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      key,
+      value,
+    );
 
+  const statements: D1PreparedStatement[] = [];
   if (partial.ownerWhatsappNumber !== undefined) {
-    upsert.run("owner_whatsapp_number", partial.ownerWhatsappNumber);
+    statements.push(upsert("owner_whatsapp_number", partial.ownerWhatsappNumber));
   }
   if (partial.orderEmail !== undefined) {
-    upsert.run("order_email", partial.orderEmail);
+    statements.push(upsert("order_email", partial.orderEmail));
   }
   if (partial.flatShippingRate !== undefined) {
-    upsert.run("flat_shipping_rate", String(partial.flatShippingRate));
+    statements.push(upsert("flat_shipping_rate", String(partial.flatShippingRate)));
+  }
+  if (statements.length) await batch(statements);
+
+  if (partial.flatShippingRate !== undefined) {
+    const shippingPayment = await getSiteContent<Partial<ShippingPaymentSettings>>(
+      "shipping_payment",
+      {},
+    );
+    await upsertSiteContent("shipping_payment", {
+      ...shippingPayment,
+      flatShippingRate: partial.flatShippingRate,
+    });
   }
 
   return getSettings();
 }
 
-export function getOrderByIdempotencyKey(key: string): Order | null {
-  const database = getDb();
-  const row = database
-    .prepare("SELECT * FROM orders WHERE idempotency_key = ?")
-    .get(key) as Record<string, unknown> | undefined;
+/**
+ * Shipping/payment rules used by `quoteOrder`. The `shipping_payment` site-content
+ * blob is the source of truth; `settings.flat_shipping_rate` is kept in sync by
+ * `updateSettings` and only used as a fallback for older data.
+ */
+export async function getShippingPaymentConfig(): Promise<ShippingPaymentConfig> {
+  const [content, settings] = await Promise.all([
+    getSiteContent<Partial<ShippingPaymentSettings>>("shipping_payment", {}),
+    getSettings(),
+  ]);
 
-  if (!row) return null;
-  return rowToOrder(row, getOrderItems(String(row.id)));
+  const flat = Number(content.flatShippingRate ?? settings.flatShippingRate);
+  const threshold =
+    content.freeShippingThreshold == null
+      ? null
+      : Number(content.freeShippingThreshold);
+  const minOrder = Number(content.minOrderValue ?? 0);
+
+  return {
+    flatShippingRate: Number.isFinite(flat) && flat > 0 ? flat : 0,
+    freeShippingThreshold:
+      threshold != null && Number.isFinite(threshold) && threshold > 0
+        ? threshold
+        : null,
+    codEnabled: content.codEnabled ?? true,
+    minOrderValue: Number.isFinite(minOrder) && minOrder > 0 ? minOrder : 0,
+  };
 }
 
-export function getOrderById(id: string): Order | null {
-  const database = getDb();
-  const row = database
-    .prepare("SELECT * FROM orders WHERE id = ?")
-    .get(id) as Record<string, unknown> | undefined;
-
+export async function getOrderByIdempotencyKey(key: string): Promise<Order | null> {
+  const row = await queryOne("SELECT * FROM orders WHERE idempotency_key = ?", key);
   if (!row) return null;
-  return rowToOrder(row, getOrderItems(id));
+  const [order] = await hydrateOrders([row]);
+  return order ?? null;
 }
 
-export function listOrders(query?: {
+export async function getOrderById(id: string): Promise<Order | null> {
+  const row = await queryOne("SELECT * FROM orders WHERE id = ?", id);
+  if (!row) return null;
+  const [order] = await hydrateOrders([row]);
+  return order ?? null;
+}
+
+export async function listOrders(query?: {
   search?: string;
   status?: OrderStatus;
-}): Order[] {
-  const database = getDb();
+}): Promise<Order[]> {
   const conditions: string[] = [];
   const params: string[] = [];
 
@@ -158,25 +220,32 @@ export function listOrders(query?: {
   }
 
   if (query?.search?.trim()) {
-    const term = `%${query.search.trim()}%`;
+    // instr() rather than LIKE '%term%': D1 rejects longer LIKE patterns.
+    const term = query.search.trim().toLowerCase();
     conditions.push(
-      "(order_number LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)",
+      "(instr(lower(order_number), ?1) > 0 OR instr(lower(customer_name), ?1) > 0 OR instr(customer_phone, ?1) > 0)",
     );
-    params.push(term, term, term);
+    params.push(term);
   }
 
-  const where =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rows = await queryAll(
+    `SELECT * FROM orders ${where} ORDER BY created_at DESC LIMIT 500`,
+    ...params,
+  );
 
-  const rows = database
-    .prepare(`SELECT * FROM orders ${where} ORDER BY created_at DESC`)
-    .all(...params) as Record<string, unknown>[];
-
-  return rows.map((row) => rowToOrder(row, getOrderItems(String(row.id))));
+  return hydrateOrders(rows);
 }
 
-export function createOrder(input: CreateOrderInput): CreateOrderResult {
-  const existing = getOrderByIdempotencyKey(input.idempotencyKey);
+export class OutOfStockError extends Error {
+  constructor(public readonly productName: string) {
+    super(`"${productName}" just sold out.`);
+    this.name = "OutOfStockError";
+  }
+}
+
+export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
+  const existing = await getOrderByIdempotencyKey(input.idempotencyKey);
   if (existing) {
     return {
       order: existing,
@@ -190,35 +259,42 @@ export function createOrder(input: CreateOrderInput): CreateOrderResult {
     };
   }
 
-  const settings = getSettings();
-  const subtotal = input.items.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0,
+  const id = uuid();
+  const orderNumber = await nextOrderNumber();
+  const createdAt = nowIso();
+
+  // D1 batches are atomic, but they cannot abort mid-way on a business rule,
+  // so we check the stock decrements' `changes` afterwards and compensate.
+  const stockStatements = input.items.map((item) =>
+    item.variantId
+      ? stmt(
+          `UPDATE product_variants
+           SET stock_quantity = stock_quantity - ?1,
+               in_stock = CASE WHEN stock_quantity - ?1 <= 0 THEN 0 ELSE in_stock END
+           WHERE product_id = ?2 AND id = ?3 AND in_stock = 1 AND stock_quantity >= ?1`,
+          item.quantity,
+          item.productId,
+          item.variantId,
+        )
+      : stmt(
+          `UPDATE products
+           SET stock_quantity = stock_quantity - ?1,
+               in_stock = CASE WHEN stock_quantity - ?1 <= 0 THEN 0 ELSE in_stock END,
+               updated_at = ?2
+           WHERE id = ?3 AND enabled = 1 AND in_stock = 1 AND stock_quantity >= ?1`,
+          item.quantity,
+          createdAt,
+          item.productId,
+        ),
   );
-  const shipping = input.shipping ?? settings.flatShippingRate;
-  const discount = input.discount ?? 0;
-  const total = Math.max(0, subtotal + shipping - discount);
 
-  const id = randomUUID();
-  const orderNumber = generateOrderNumber();
-  const createdAt = new Date().toISOString();
-  const database = getDb();
-
-  const insertOrder = database.prepare(`
-    INSERT INTO orders (
-      id, order_number, customer_name, customer_phone, customer_email,
-      customer_address, notes, subtotal, shipping, discount, total,
-      payment_status, order_status, idempotency_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)
-  `);
-
-  const insertItem = database.prepare(`
-    INSERT INTO order_items (order_id, product_id, slug, name, size, quantity, price)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const transaction = database.transaction(() => {
-    insertOrder.run(
+  const results = await batch([
+    stmt(
+      `INSERT INTO orders (
+        id, order_number, customer_name, customer_phone, customer_email,
+        customer_address, notes, subtotal, shipping, discount, total, coupon_code,
+        payment_status, order_status, idempotency_key, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
       id,
       orderNumber,
       input.customerName,
@@ -226,31 +302,60 @@ export function createOrder(input: CreateOrderInput): CreateOrderResult {
       input.customerEmail ?? null,
       input.customerAddress ?? null,
       input.notes ?? null,
-      subtotal,
-      shipping,
-      discount,
-      total,
+      input.subtotal,
+      input.shipping,
+      input.discount,
+      input.total,
+      input.couponCode,
       input.paymentStatus,
       input.idempotencyKey,
       createdAt,
-    );
-
-    for (const item of input.items) {
-      insertItem.run(
+    ),
+    ...input.items.map((item) =>
+      stmt(
+        `INSERT INTO order_items (order_id, product_id, slug, name, size, variant_id, variant_label, quantity, price)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
-        item.productId ?? null,
-        item.slug ?? null,
+        item.productId,
+        item.slug,
         item.name,
-        item.size ?? null,
+        item.size,
+        item.variantId,
+        item.variantLabel,
         item.quantity,
         item.price,
-      );
-    }
-  });
+      ),
+    ),
+    ...stockStatements,
+  ]);
 
-  transaction();
+  const stockResults = results.slice(1 + input.items.length);
+  const failedIndex = stockResults.findIndex((r) => (r.meta.changes ?? 0) === 0);
+  if (failedIndex !== -1) {
+    // Roll back: restore stock for the lines that did decrement, drop the order.
+    const succeeded = input.items.filter((_, i) => i !== failedIndex && (stockResults[i].meta.changes ?? 0) > 0);
+    await batch([
+      ...succeeded.map((item) =>
+        item.variantId
+          ? stmt(
+              "UPDATE product_variants SET stock_quantity = stock_quantity + ?, in_stock = 1 WHERE product_id = ? AND id = ?",
+              item.quantity,
+              item.productId,
+              item.variantId,
+            )
+          : stmt(
+              "UPDATE products SET stock_quantity = stock_quantity + ?, in_stock = 1 WHERE id = ?",
+              item.quantity,
+              item.productId,
+            ),
+      ),
+      stmt("DELETE FROM order_items WHERE order_id = ?", id),
+      stmt("DELETE FROM orders WHERE id = ?", id),
+    ]);
+    throw new OutOfStockError(input.items[failedIndex].name);
+  }
 
-  const order = getOrderById(id);
+  const order = await getOrderById(id);
   if (!order) {
     throw new Error("Failed to create order");
   }
@@ -267,7 +372,7 @@ export function createOrder(input: CreateOrderInput): CreateOrderResult {
   };
 }
 
-export function updateOrderNotificationStatus(
+export async function updateOrderNotificationStatus(
   orderId: string,
   update: {
     whatsappNotified?: boolean;
@@ -277,49 +382,31 @@ export function updateOrderNotificationStatus(
     emailNotified?: boolean;
     emailError?: string | null;
   },
-) {
-  const database = getDb();
+): Promise<void> {
   const fields: string[] = [];
   const values: Array<string | number | null> = [];
 
-  if (update.whatsappNotified !== undefined) {
-    fields.push("whatsapp_notified = ?");
-    values.push(update.whatsappNotified ? 1 : 0);
-  }
-  if (update.whatsappError !== undefined) {
-    fields.push("whatsapp_error = ?");
-    values.push(update.whatsappError);
-  }
-  if (update.customerWhatsappNotified !== undefined) {
-    fields.push("customer_whatsapp_notified = ?");
-    values.push(update.customerWhatsappNotified ? 1 : 0);
-  }
-  if (update.customerWhatsappError !== undefined) {
-    fields.push("customer_whatsapp_error = ?");
-    values.push(update.customerWhatsappError);
-  }
-  if (update.emailNotified !== undefined) {
-    fields.push("email_notified = ?");
-    values.push(update.emailNotified ? 1 : 0);
-  }
-  if (update.emailError !== undefined) {
-    fields.push("email_error = ?");
-    values.push(update.emailError);
-  }
+  const set = (column: string, value: string | number | null) => {
+    fields.push(`${column} = ?`);
+    values.push(value);
+  };
+
+  if (update.whatsappNotified !== undefined) set("whatsapp_notified", update.whatsappNotified ? 1 : 0);
+  if (update.whatsappError !== undefined) set("whatsapp_error", update.whatsappError);
+  if (update.customerWhatsappNotified !== undefined) set("customer_whatsapp_notified", update.customerWhatsappNotified ? 1 : 0);
+  if (update.customerWhatsappError !== undefined) set("customer_whatsapp_error", update.customerWhatsappError);
+  if (update.emailNotified !== undefined) set("email_notified", update.emailNotified ? 1 : 0);
+  if (update.emailError !== undefined) set("email_error", update.emailError);
 
   if (fields.length === 0) return;
 
-  values.push(orderId);
-  database
-    .prepare(`UPDATE orders SET ${fields.join(", ")} WHERE id = ?`)
-    .run(...values);
+  await execute(`UPDATE orders SET ${fields.join(", ")} WHERE id = ?`, ...values, orderId);
 }
 
-export function updateOrderStatus(
+export async function updateOrderStatus(
   orderId: string,
   update: { orderStatus?: OrderStatus; paymentStatus?: PaymentStatus },
-): Order | null {
-  const database = getDb();
+): Promise<Order | null> {
   const fields: string[] = [];
   const values: string[] = [];
 
@@ -334,10 +421,6 @@ export function updateOrderStatus(
 
   if (fields.length === 0) return getOrderById(orderId);
 
-  values.push(orderId);
-  database
-    .prepare(`UPDATE orders SET ${fields.join(", ")} WHERE id = ?`)
-    .run(...values);
-
+  await execute(`UPDATE orders SET ${fields.join(", ")} WHERE id = ?`, ...values, orderId);
   return getOrderById(orderId);
 }

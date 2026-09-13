@@ -36,6 +36,14 @@ yarn-error.log*
 # vercel
 .vercel
 
-/data/
 *.tsbuildinfo
 next-env.d.ts
+
+# legacy local sqlite (pre-D1); keep until migration is verified in production
+/data/
+
+# cloudflare
+.open-next/
+.wrangler/
+.dev.vars
+cloudflare-env.d.ts

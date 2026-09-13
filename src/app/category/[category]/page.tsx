@@ -5,40 +5,25 @@ import { CategoryPageHero } from "@/components/category-page-hero";
 import { CategoryContent } from "@/components/category-content";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
+import { JsonLd } from "@/components/json-ld";
 import { WhatsAppButton } from "@/components/whatsapp-button";
-import {
-  categories,
-  getCategoryBySlug,
-  getCategoryLabel,
-  isCategorySlug,
-} from "@/lib/categories";
-import {
-  getProductsByCategory,
-} from "@/lib/catalog-server";
+import { isCategorySlug } from "@/lib/categories";
+import { getCategory } from "@/lib/cms/categories-repository";
+import { getProductsByCategory } from "@/lib/catalog-server";
+import { breadcrumbJsonLd, buildCategoryMetadata, itemListJsonLd } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-
-export function generateStaticParams() {
-  return categories.map((category) => ({ category: category.slug }));
-}
 
 export async function generateMetadata({
   params,
 }: PageProps<"/category/[category]">) {
   const { category: categorySlug } = await params;
-
   if (!isCategorySlug(categorySlug)) {
-    return { title: "Category Not Found | Womania by Dola" };
+    return { title: "Category Not Found" };
   }
-
-  const category = getCategoryBySlug(categorySlug);
-
-  return {
-    title: `${getCategoryLabel(categorySlug)} | Womania by Dola`,
-    description:
-      category?.description ??
-      `Shop ${getCategoryLabel(categorySlug)} at Womania by Dola.`,
-  };
+  const category = await getCategory(categorySlug);
+  if (!category) return { title: "Category Not Found" };
+  return buildCategoryMetadata(category);
 }
 
 export default async function CategoryPage({
@@ -50,16 +35,25 @@ export default async function CategoryPage({
     notFound();
   }
 
-  const category = getCategoryBySlug(categorySlug);
-
-  if (!category) {
+  const category = await getCategory(categorySlug);
+  if (!category || !category.enabled) {
     notFound();
   }
 
-  const categoryProducts = getProductsByCategory(categorySlug);
+  const categoryProducts = await getProductsByCategory(categorySlug);
 
   return (
     <>
+      <JsonLd
+        data={[
+          breadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            { name: "Shop", path: "/shop" },
+            { name: category.name, path: `/category/${category.slug}` },
+          ]),
+          itemListJsonLd(category.name, categoryProducts),
+        ]}
+      />
       <AnnouncementBar />
       <Header />
       <main>
@@ -67,7 +61,7 @@ export default async function CategoryPage({
           category={categorySlug}
           eyebrow="Shop by Category"
           title={category.name}
-          description={category.description}
+          description={category.description ?? ""}
         />
 
         <section className="bg-ivory py-12 lg:py-16">

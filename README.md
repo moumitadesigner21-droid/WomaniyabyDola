@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Womania by Dola
 
-## Getting Started
+Storefront + admin CMS for a handloom boutique in Jalpaiguri. Next.js 16 (App Router) deployed to **Cloudflare Workers** via OpenNext, with **D1** (SQLite) for orders and CMS content and **R2** for admin image uploads. Orders are cash-on-delivery and notify the owner over WhatsApp/email.
 
-First, run the development server:
+Live: https://womania-by-dola.karao-digital.workers.dev (until `womaniabydola.com` is attached)
+
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .dev.vars.example .dev.vars   # set ADMIN_PASSWORD and ADMIN_SESSION_SECRET
+npm install
+npm run db:migrate:local         # create tables in the local D1
+npm run db:seed:local            # load the catalog/content snapshot from db/seed.sql
+npm run dev                      # http://localhost:3000 (Next dev server + local D1/R2)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`next dev` gets the Cloudflare bindings through `initOpenNextCloudflareForDev()` in `next.config.ts`; the local database lives under `.wrangler/state/`. To run the real Workers runtime locally: `npm run preview`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Admin
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`/admin` — username `admin`. On a fresh database the first login uses the `ADMIN_PASSWORD` secret and creates the account; after that, change the password from **Admin → Settings** (stored as a PBKDF2 hash in the `admin_users` table). The secret is ignored once an account exists.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command | What it does |
+|---|---|
+| `npm run dev` / `build` / `start` | Standard Next.js lifecycle |
+| `npm run lint` / `typecheck` | ESLint / `tsc --noEmit` |
+| `npm run preview` | OpenNext build + run in local workerd |
+| `npm run deploy` | OpenNext build + deploy to Cloudflare |
+| `npm run cf-typegen` | Regenerate `cloudflare-env.d.ts` after editing `wrangler.jsonc` |
+| `npm run db:migrate:local` / `db:migrate:remote` | Apply `migrations/*.sql` to local / production D1 |
+| `npm run db:seed:local` / `db:seed:remote` | Load `db/seed.sql` (initial catalog + content) |
+| `npm run db:export` | Dump production D1 to `db/backup.sql` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploying
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npx wrangler login
+npx wrangler secret put ADMIN_PASSWORD          # bootstrap password (first login only)
+npx wrangler secret put ADMIN_SESSION_SECRET    # long random string; rotate to log everyone out
+npx wrangler secret put WHATSAPP_API_TOKEN      # optional, Meta Cloud API
+npx wrangler secret put WHATSAPP_PHONE_NUMBER_ID
+npx wrangler secret put CALLMEBOT_API_KEY       # optional, fallback channel
+npx wrangler secret put RESEND_API_KEY          # optional, email backup
+npm run db:migrate:remote
+npm run deploy
+```
 
-## Deploy on Vercel
+`SITE_URL` (canonical origin for sitemap/OG/JSON-LD) is a plain var in `wrangler.jsonc` — change it when the custom domain is attached. Cloudflare resources: D1 `womania-db`, R2 bucket `womania-media`, plus three rate-limit bindings (login, orders, quotes), all declared in `wrangler.jsonc`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Free-plan budget:** 100k Worker requests/day, D1 5M row reads / 100k writes per day (hard errors past that), R2 10 GB. D1 keeps 7 days of point-in-time history; run `npm run db:export` for an offline copy.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Notifications
+
+On each order the server tries, in sequence: owner WhatsApp → customer WhatsApp → owner email. WhatsApp uses the Meta Cloud API when `WHATSAPP_API_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` are set, falling back to CallMeBot (`CALLMEBOT_API_KEY`). Email uses Resend (`RESEND_API_KEY`). A missing credential never blocks an order; the failure is recorded on the order row and shown in `/admin/orders`.
+
+Message bodies are editable in **Admin → Content → WhatsApp templates** using `{{placeholder}}` syntax.
+
+## Where things are edited
+
+| Thing | Admin page |
+|---|---|
+| Products, stock, sale price, images | `/admin/products` |
+| Coupons | `/admin/offers` |
+| Header / footer navigation | `/admin/navigation` |
+| Homepage sections & order, hero, banners, testimonials | `/admin/homepage` |
+| Announcement bar, About/Contact copy, policies, social links, shipping rules, WhatsApp templates | `/admin/content` |
+| Site/page titles, descriptions, keywords, share images, category SEO, business details (structured data) | `/admin/seo` |
+| Uploaded images (browse, upload, delete) | `/admin/media` |
+| Logo, brand colours | `/admin/appearance` |
+| Owner WhatsApp number, notification email, flat shipping rate, admin password | `/admin/settings` |
+
+See `CLAUDE.md` for architecture notes.

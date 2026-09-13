@@ -49,8 +49,8 @@ export function AdminSettingsPanel() {
     >
       <h2 className="font-serif text-2xl text-maroon">Notification Settings</h2>
       <p className="mt-2 text-sm text-warm-gray">
-        Configure where new order alerts are sent. API keys stay in{" "}
-        <code className="text-xs">.env.local</code> — never in this panel.
+        Configure where new order alerts are sent. API keys are stored as
+        Cloudflare Worker secrets — never in this panel.
       </p>
 
       <div className="mt-6 rounded border border-charcoal/10 bg-ivory/60 p-4 text-xs leading-relaxed text-warm-gray">
@@ -64,9 +64,9 @@ export function AdminSettingsPanel() {
           </li>
           <li>Copy the API key CallMeBot replies with</li>
           <li>
-            Add <span className="font-mono text-charcoal">CALLMEBOT_API_KEY=...</span>{" "}
-            to <span className="font-mono text-charcoal">.env.local</span> and restart
-            the dev server
+            Run <span className="font-mono text-charcoal">npx wrangler secret put CALLMEBOT_API_KEY</span>{" "}
+            and paste the key (locally: add it to{" "}
+            <span className="font-mono text-charcoal">.dev.vars</span>)
           </li>
         </ol>
       </div>
@@ -123,6 +123,10 @@ export function AdminSettingsPanel() {
           }
           className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none focus:border-maroon"
         />
+        <span className="mt-2 block text-xs text-warm-gray">
+          Free-shipping threshold, minimum order value and COD on/off live under{" "}
+          <span className="font-medium text-charcoal">Content → Shipping &amp; Payment</span>.
+        </span>
       </label>
 
       {message ? <p className="mt-4 text-sm text-forest">{message}</p> : null}

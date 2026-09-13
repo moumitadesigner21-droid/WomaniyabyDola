@@ -9,6 +9,31 @@ export interface CmsProductImage {
   imageType: "gallery" | "pallu" | "drape" | "video_thumb";
 }
 
+export interface CmsProductOption {
+  /** e.g. "Size", "Colour" */
+  name: string;
+  values: string[];
+}
+
+export interface CmsProductVariant {
+  /** Deterministic id derived from option values, e.g. "size-m__colour-red". */
+  id: string;
+  productId: string;
+  optionValues: Record<string, string>;
+  sku: string | null;
+  /** null = inherit the product price */
+  price: number | null;
+  salePrice: number | null;
+  stockQuantity: number;
+  inStock: boolean;
+  image: string | null;
+  sortOrder: number;
+}
+
+export type CmsProductVariantInput = Omit<CmsProductVariant, "productId" | "id"> & {
+  id?: string;
+};
+
 export interface CmsProduct {
   id: string;
   slug: string;
@@ -47,6 +72,8 @@ export interface CmsProduct {
   palluImage: string | null;
   sortOrder: number;
   images: CmsProductImage[];
+  options: CmsProductOption[];
+  variants: CmsProductVariant[];
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +115,8 @@ export interface CmsProductInput {
   palluImage?: string | null;
   sortOrder?: number;
   images?: Omit<CmsProductImage, "id" | "productId">[];
+  options?: CmsProductOption[];
+  variants?: CmsProductVariantInput[];
 }
 
 export interface CmsCategory {
