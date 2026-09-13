@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AdminShell } from "@/components/admin/admin-shell";
 import { isAdminAuthenticated } from "@/lib/admin/session";
 
 export default async function AdminProtectedLayout({
@@ -11,5 +12,5 @@ export default async function AdminProtectedLayout({
     redirect("/admin/login");
   }
 
-  return <div className="min-h-screen bg-ivory">{children}</div>;
+  return <AdminShell>{children}</AdminShell>;
 }
