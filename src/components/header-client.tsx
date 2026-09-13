@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WomaniaLogo } from "@/components/womania-logo";
 import { useCart } from "@/lib/cart";
+import { useCustomer } from "@/lib/customer";
 
 import type { NavLinkItem } from "@/lib/site-chrome";
 
@@ -47,7 +48,10 @@ function HeaderInner({ links, logoUrl }: HeaderClientProps) {
   const [scrolled, setScrolled] = useState(false);
 
   const { itemCount: cartCount } = useCart();
-  const wishlistCount = 0;
+  const { wishlist, customer } = useCustomer();
+  const wishlistCount = wishlist.length;
+  const accountHref = customer ? "/account" : "/account/login";
+  const accountLabel = customer ? `Account (${customer.name.split(" ")[0]})` : "Sign in";
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -97,14 +101,14 @@ function HeaderInner({ links, logoUrl }: HeaderClientProps) {
             >
               <Search className="h-[19px] w-[19px]" strokeWidth={1.6} />
             </button>
-            <button
-              type="button"
+            <Link
+              href="/account/wishlist"
               aria-label="Wishlist"
               className="relative hidden h-10 w-10 items-center justify-center text-charcoal/75 transition-colors hover:text-maroon sm:flex"
             >
               <Heart className="h-[19px] w-[19px]" strokeWidth={1.6} />
-              <IconBadge count={wishlistCount} />
-            </button>
+              {wishlistCount > 0 ? <IconBadge count={wishlistCount} /> : null}
+            </Link>
           </div>
 
           {/* Center logo */}
@@ -114,13 +118,16 @@ function HeaderInner({ links, logoUrl }: HeaderClientProps) {
 
           {/* Right utilities */}
           <div className="flex items-center justify-end gap-1 sm:gap-2">
-            <button
-              type="button"
-              aria-label="Account"
-              className="hidden h-10 w-10 items-center justify-center text-charcoal/75 transition-colors hover:text-maroon sm:flex"
+            <Link
+              href={accountHref}
+              aria-label={accountLabel}
+              title={accountLabel}
+              className={`hidden h-10 w-10 items-center justify-center transition-colors hover:text-maroon sm:flex ${
+                customer ? "text-forest" : "text-charcoal/75"
+              }`}
             >
               <User className="h-[19px] w-[19px]" strokeWidth={1.6} />
-            </button>
+            </Link>
             <Link
               href="/cart"
               aria-label="Cart"
@@ -296,36 +303,38 @@ function HeaderInner({ links, logoUrl }: HeaderClientProps) {
             </nav>
 
             <div className="grid grid-cols-3 gap-2 border-t border-charcoal/8 px-5 py-4">
-              <button
-                type="button"
-                aria-label="Wishlist"
+              <Link
+                href="/account/wishlist"
+                onClick={() => setMobileOpen(false)}
                 className="relative flex flex-col items-center gap-1 py-2 text-charcoal/80"
               >
-                <Heart className="h-5 w-5" strokeWidth={1.75} />
-                <IconBadge count={wishlistCount} />
-                <span className="text-[10px] tracking-wider uppercase">
-                  Wishlist
+                <span className="relative">
+                  <Heart className="h-5 w-5" strokeWidth={1.75} />
+                  {wishlistCount > 0 ? <IconBadge count={wishlistCount} /> : null}
                 </span>
-              </button>
-              <button
-                type="button"
-                aria-label="Account"
-                className="flex flex-col items-center gap-1 py-2 text-charcoal/80"
+                <span className="text-[10px] tracking-wider uppercase">Wishlist</span>
+              </Link>
+              <Link
+                href={accountHref}
+                onClick={() => setMobileOpen(false)}
+                className={`flex flex-col items-center gap-1 py-2 ${customer ? "text-forest" : "text-charcoal/80"}`}
               >
                 <User className="h-5 w-5" strokeWidth={1.75} />
                 <span className="text-[10px] tracking-wider uppercase">
-                  Account
+                  {customer ? "Account" : "Sign in"}
                 </span>
-              </button>
-              <button
-                type="button"
-                aria-label="Cart"
+              </Link>
+              <Link
+                href="/cart"
+                onClick={() => setMobileOpen(false)}
                 className="relative flex flex-col items-center gap-1 py-2 text-charcoal/80"
               >
-                <ShoppingCart className="h-5 w-5" strokeWidth={1.75} />
-                <IconBadge count={cartCount} />
+                <span className="relative">
+                  <ShoppingCart className="h-5 w-5" strokeWidth={1.75} />
+                  {cartCount > 0 ? <IconBadge count={cartCount} /> : null}
+                </span>
                 <span className="text-[10px] tracking-wider uppercase">Cart</span>
-              </button>
+              </Link>
             </div>
           </div>
         </div>

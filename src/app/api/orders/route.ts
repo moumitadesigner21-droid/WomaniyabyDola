@@ -19,6 +19,7 @@ import {
   sendOwnerWhatsAppNotification,
 } from "@/lib/orders/whatsapp";
 import { isAdminAuthenticated } from "@/lib/admin/session";
+import { getCurrentCustomer } from "@/lib/customers/session";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
 
     // Authoritative totals come from the catalog, never from the client.
     const quote = await quoteOrder(body.items, body.couponCode);
+    const customer = await getCurrentCustomer();
 
     const result = await createOrder({
       customerName: body.customerName,
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
       discount: quote.discount,
       total: quote.total,
       couponCode: quote.couponCode,
+      customerId: customer?.id ?? null,
       idempotencyKey: body.idempotencyKey,
     });
 

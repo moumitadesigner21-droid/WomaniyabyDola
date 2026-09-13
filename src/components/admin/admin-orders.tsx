@@ -13,9 +13,9 @@ const statusFilters: Array<{ value: OrderStatus | "all"; label: string }> = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-export function AdminOrdersPanel() {
+export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState<OrderStatus | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,7 +123,14 @@ export function AdminOrdersPanel() {
                       #{order.orderNumber}
                     </td>
                     <td className="px-4 py-3">
-                      <p>{order.customerName}</p>
+                      <p>
+                        {order.customerName}
+                        {order.customerId ? (
+                          <span className="ml-2 bg-forest/10 px-1.5 py-0.5 text-[9px] tracking-[0.12em] text-forest uppercase">
+                            Account
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="text-xs text-warm-gray">
                         {order.customerPhone}
                       </p>

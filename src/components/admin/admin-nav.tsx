@@ -10,6 +10,7 @@ const links = [
   { href: "/admin/navigation", label: "Navigation" },
   { href: "/admin/offers", label: "Offers" },
   { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/customers", label: "Customers" },
   { href: "/admin/appearance", label: "Appearance" },
   { href: "/admin/seo", label: "SEO" },
   { href: "/admin/settings", label: "Settings" },

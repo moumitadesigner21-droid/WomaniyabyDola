@@ -36,6 +36,7 @@ function rowToOrder(row: Row, items: OrderItem[]): Order {
     discount: Number(row.discount),
     total: Number(row.total),
     couponCode: row.coupon_code ? String(row.coupon_code) : null,
+    customerId: row.customer_id ? String(row.customer_id) : null,
     paymentStatus: row.payment_status as PaymentStatus,
     orderStatus: row.order_status as OrderStatus,
     whatsappNotified: Boolean(row.whatsapp_notified),
@@ -223,7 +224,7 @@ export async function listOrders(query?: {
     // instr() rather than LIKE '%term%': D1 rejects longer LIKE patterns.
     const term = query.search.trim().toLowerCase();
     conditions.push(
-      "(instr(lower(order_number), ?1) > 0 OR instr(lower(customer_name), ?1) > 0 OR instr(customer_phone, ?1) > 0)",
+      "(instr(lower(order_number), ?1) > 0 OR instr(lower(customer_name), ?1) > 0 OR instr(customer_phone, ?1) > 0 OR instr(lower(COALESCE(customer_email, '')), ?1) > 0)",
     );
     params.push(term);
   }
@@ -235,6 +236,21 @@ export async function listOrders(query?: {
   );
 
   return hydrateOrders(rows);
+}
+
+export async function listOrdersForCustomer(customerId: string): Promise<Order[]> {
+  const rows = await queryAll(
+    "SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 200",
+    customerId,
+  );
+  return hydrateOrders(rows);
+}
+
+export async function getOrderForCustomer(customerId: string, id: string): Promise<Order | null> {
+  const row = await queryOne("SELECT * FROM orders WHERE id = ? AND customer_id = ?", id, customerId);
+  if (!row) return null;
+  const [order] = await hydrateOrders([row]);
+  return order ?? null;
 }
 
 export class OutOfStockError extends Error {
@@ -293,8 +309,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       `INSERT INTO orders (
         id, order_number, customer_name, customer_phone, customer_email,
         customer_address, notes, subtotal, shipping, discount, total, coupon_code,
-        payment_status, order_status, idempotency_key, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+        customer_id, payment_status, order_status, idempotency_key, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
       id,
       orderNumber,
       input.customerName,
@@ -307,6 +323,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       input.discount,
       input.total,
       input.couponCode,
+      input.customerId ?? null,
       input.paymentStatus,
       input.idempotencyKey,
       createdAt,

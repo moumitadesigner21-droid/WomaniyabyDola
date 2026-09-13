@@ -51,6 +51,10 @@ npm run deploy
 
 **Free-plan budget:** 100k Worker requests/day, D1 5M row reads / 100k writes per day (hard errors past that), R2 10 GB. D1 keeps 7 days of point-in-time history; run `npm run db:export` for an offline copy.
 
+## Customer accounts
+
+Shoppers can register at `/account/register` (email + password, PBKDF2-hashed in the `customers` table), then see orders placed while signed in, save delivery addresses (pre-filled at checkout) and keep a wishlist that syncs across devices. Guests still check out normally and keep a device-local wishlist. There is no email-based password reset yet — the owner can help via WhatsApp. Admin → Customers lists accounts with order counts.
+
 ## Notifications
 
 On each order the server tries, in sequence: owner WhatsApp → customer WhatsApp → owner email. WhatsApp uses the Meta Cloud API when `WHATSAPP_API_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` are set, falling back to CallMeBot (`CALLMEBOT_API_KEY`). Email uses Resend (`RESEND_API_KEY`). A missing credential never blocks an order; the failure is recorded on the order row and shown in `/admin/orders`.

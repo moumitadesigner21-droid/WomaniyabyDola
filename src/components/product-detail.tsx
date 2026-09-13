@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { WishlistButton } from "@/components/wishlist-button";
 import { useCart } from "@/lib/cart";
 import { getCategoryLabel, getCategoryPath } from "@/lib/categories";
 import type { Product } from "@/lib/data";
@@ -208,9 +209,16 @@ export function ProductDetail({ product }: ProductDetailProps) {
           <p className="mt-4 text-[10px] tracking-[0.2em] text-warm-gray uppercase">
             {getCategoryLabel(product.category)}
           </p>
-          <h1 className="mt-2 font-serif text-3xl leading-tight text-maroon sm:text-4xl">
-            {product.name}
-          </h1>
+          <div className="mt-2 flex items-start justify-between gap-4">
+            <h1 className="font-serif text-3xl leading-tight text-maroon sm:text-4xl">
+              {product.name}
+            </h1>
+            <WishlistButton
+              productId={product.id}
+              size="md"
+              className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center border border-charcoal/15 text-charcoal transition-colors hover:border-maroon hover:text-maroon"
+            />
+          </div>
           <p className="mt-4 text-2xl font-medium text-maroon">
             {formatPrice(displayPrice)}
             {displayCompareAt ? (

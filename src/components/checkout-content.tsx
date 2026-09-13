@@ -4,7 +4,10 @@ import { ArrowLeft, CheckCircle2, ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AddressCard, AddressFields, emptyAddress } from "@/components/account/address-book";
 import { useCart } from "@/lib/cart";
+import { useCustomer } from "@/lib/customer";
+import { formatAddress, type CustomerAddressInput } from "@/lib/customers/types";
 import { formatPrice } from "@/lib/format";
 import type { OrderQuote } from "@/lib/orders/pricing";
 import type { Order } from "@/lib/orders/types";
@@ -28,12 +31,31 @@ function makeIdempotencyKey() {
 
 export function CheckoutContent() {
   const { items, subtotal, itemCount, hydrated, clearCart } = useCart();
+  const { customer, addresses, hydrated: customerHydrated, setAddresses } = useCustomer();
   const [idempotencyKey] = useState(makeIdempotencyKey);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState<CustomerAddressInput>(emptyAddress);
+  // Saved address chosen at checkout; "new" = typing a fresh one.
+  const [selectedAddressId, setSelectedAddressId] = useState<string | "new" | null>(null);
+  const [saveAddress, setSaveAddress] = useState(true);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Pre-fill contact details and default address once the session is known.
+  if (customerHydrated && customer && !prefilled) {
+    setPrefilled(true);
+    if (!name) setName(customer.name);
+    if (!phone && customer.phone) setPhone(customer.phone);
+    if (!email) setEmail(customer.email);
+    const preferred = addresses.find((a) => a.isDefault) ?? addresses[0];
+    setSelectedAddressId(preferred ? preferred.id : "new");
+  }
+
+  const chosenSaved = selectedAddressId && selectedAddressId !== "new"
+    ? addresses.find((a) => a.id === selectedAddressId)
+    : undefined;
   const [notes, setNotes] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -213,12 +235,22 @@ export function CheckoutContent() {
             </p>
           ) : null}
 
-          <Link
-            href="/shop"
-            className="mt-8 inline-flex min-h-[48px] items-center justify-center bg-maroon px-8 py-3 text-xs font-semibold tracking-[0.18em] text-ivory uppercase transition-colors hover:bg-maroon-dark"
-          >
-            Continue Shopping
-          </Link>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            {customer ? (
+              <Link
+                href={`/account/orders/${result.order.id}`}
+                className="inline-flex min-h-[48px] items-center justify-center border border-maroon px-8 py-3 text-xs font-semibold tracking-[0.18em] text-maroon uppercase transition-colors hover:bg-maroon hover:text-ivory"
+              >
+                View order in my account
+              </Link>
+            ) : null}
+            <Link
+              href="/shop"
+              className="inline-flex min-h-[48px] items-center justify-center bg-maroon px-8 py-3 text-xs font-semibold tracking-[0.18em] text-ivory uppercase transition-colors hover:bg-maroon-dark"
+            >
+              Continue Shopping
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -227,7 +259,18 @@ export function CheckoutContent() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!name.trim() || !phone.trim() || !address.trim()) {
+    const deliveryAddress: CustomerAddressInput | undefined = chosenSaved
+      ? chosenSaved
+      : { ...address, fullName: address.fullName || name.trim(), phone: address.phone || phone.trim() };
+
+    if (
+      !name.trim() ||
+      !phone.trim() ||
+      !deliveryAddress ||
+      !deliveryAddress.line1.trim() ||
+      !deliveryAddress.city.trim() ||
+      !deliveryAddress.postalCode.trim()
+    ) {
       setSubmitError("Please fill in your name, phone, and delivery address.");
       return;
     }
@@ -253,7 +296,7 @@ export function CheckoutContent() {
           customerName: name.trim(),
           customerPhone: phone.trim(),
           customerEmail: email.trim() || undefined,
-          customerAddress: address.trim(),
+          customerAddress: formatAddress(deliveryAddress),
           notes: notes.trim() || undefined,
           couponCode: appliedCoupon ?? undefined,
           idempotencyKey,
@@ -285,6 +328,20 @@ export function CheckoutContent() {
       if (!response.ok) {
         setSubmitError(payload.error ?? "Unable to place order.");
         return;
+      }
+
+      // Save a newly typed address to the account for next time.
+      if (customer && !chosenSaved && saveAddress) {
+        const saved = await fetch("/api/account/addresses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...deliveryAddress, isDefault: addresses.length === 0 }),
+        });
+        if (saved.ok) {
+          const refreshed = await fetch("/api/account/addresses");
+          const list = (await refreshed.json().catch(() => ({}))) as { addresses?: typeof addresses };
+          if (list.addresses) setAddresses(list.addresses);
+        }
       }
 
       clearCart();
@@ -355,18 +412,69 @@ export function CheckoutContent() {
             />
           </label>
 
-          <label className="block">
+          <div>
             <span className="mb-2 block text-xs tracking-[0.14em] text-charcoal uppercase">
               Delivery address *
             </span>
-            <textarea
-              required
-              rows={4}
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              className="w-full resize-y border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none transition-colors focus:border-maroon"
-            />
-          </label>
+
+            {customer && addresses.length ? (
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                {addresses.map((saved) => (
+                  <label
+                    key={saved.id}
+                    className={`cursor-pointer ${selectedAddressId === saved.id ? "ring-2 ring-maroon/40" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="saved-address"
+                      className="sr-only"
+                      checked={selectedAddressId === saved.id}
+                      onChange={() => setSelectedAddressId(saved.id)}
+                    />
+                    <AddressCard address={saved} />
+                  </label>
+                ))}
+                <label
+                  className={`flex cursor-pointer items-center justify-center border border-dashed px-4 py-6 text-xs tracking-[0.14em] uppercase ${
+                    selectedAddressId === "new" ? "border-maroon text-maroon" : "border-charcoal/25 text-warm-gray"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="saved-address"
+                    className="sr-only"
+                    checked={selectedAddressId === "new"}
+                    onChange={() => setSelectedAddressId("new")}
+                  />
+                  + Use a different address
+                </label>
+              </div>
+            ) : null}
+
+            {!chosenSaved ? (
+              <>
+                <AddressFields
+                  value={{ ...address, fullName: address.fullName || name, phone: address.phone || phone }}
+                  onChange={setAddress}
+                />
+                {customer ? (
+                  <label className="mt-3 flex items-center gap-2 text-sm text-charcoal">
+                    <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
+                    Save this address to my account
+                  </label>
+                ) : null}
+              </>
+            ) : null}
+
+            {!customer && customerHydrated ? (
+              <p className="mt-3 text-xs text-warm-gray">
+                <Link href="/account/login?next=%2Fcheckout" className="font-medium text-maroon underline-offset-2 hover:underline">
+                  Sign in
+                </Link>{" "}
+                to use a saved address and track this order in your account.
+              </p>
+            ) : null}
+          </div>
 
           <label className="block">
             <span className="mb-2 block text-xs tracking-[0.14em] text-charcoal uppercase">

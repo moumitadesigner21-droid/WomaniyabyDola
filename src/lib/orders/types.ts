@@ -37,6 +37,8 @@ export interface CreateOrderInput {
   discount: number;
   total: number;
   couponCode: string | null;
+  /** Signed-in customer placing the order, if any. */
+  customerId?: string | null;
   idempotencyKey: string;
 }
 
@@ -66,6 +68,7 @@ export interface Order {
   discount: number;
   total: number;
   couponCode: string | null;
+  customerId: string | null;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
   whatsappNotified: boolean;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Playfair_Display } from "next/font/google";
 import { HashScroll } from "@/components/hash-scroll";
 import { CartProvider } from "@/lib/cart";
+import { CustomerProvider } from "@/lib/customer";
 import { JsonLd } from "@/components/json-ld";
 import { getSeoSettings, organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { getAppearance } from "@/lib/site-chrome";
@@ -79,10 +80,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-ivory text-charcoal">
         <JsonLd data={[organization, website]} />
-        <CartProvider>
-          <HashScroll />
-          {children}
-        </CartProvider>
+        <CustomerProvider>
+          <CartProvider>
+            <HashScroll />
+            {children}
+          </CartProvider>
+        </CustomerProvider>
       </body>
     </html>
   );

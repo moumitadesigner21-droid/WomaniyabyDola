@@ -1,9 +1,10 @@
 "use client";
 
-import { Heart, ShoppingBag } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { WishlistButton } from "@/components/wishlist-button";
 import { getProductPath } from "@/lib/catalog";
 import { getCategoryLabel } from "@/lib/categories";
 import { getProductHoverImage, type Product } from "@/lib/data";
@@ -163,14 +164,11 @@ export function ProductCard({
             </span>
           )}
         </div>
-        <div className="absolute top-3 right-3 z-20 flex flex-col gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
-            aria-label="Add to wishlist"
-            className="flex h-9 w-9 items-center justify-center bg-ivory/90 transition-colors hover:bg-gold"
-          >
-            <Heart className="h-4 w-4 text-charcoal" />
-          </button>
+        <div className="absolute top-3 right-3 z-20 flex flex-col gap-2 opacity-0 transition-opacity group-hover:opacity-100 has-[[aria-pressed=true]]:opacity-100 [@media(hover:none)]:opacity-100">
+          <WishlistButton
+            productId={product.id}
+            className="flex h-9 w-9 items-center justify-center bg-ivory/90 text-charcoal transition-colors hover:bg-gold"
+          />
         </div>
         {!soldOut && (
           <Link
