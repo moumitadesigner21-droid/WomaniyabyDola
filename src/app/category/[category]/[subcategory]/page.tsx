@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { CategoryPageHero } from "@/components/category-page-hero";
-import { CategoryContent } from "@/components/category-content";
+import { CatalogBrowser } from "@/components/catalog/catalog-browser";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { WhatsAppButton } from "@/components/whatsapp-button";
@@ -88,10 +88,10 @@ export default async function SubcategoryPage({
               </div>
             }
           >
-            <CategoryContent
+            <CatalogBrowser
               category={categorySlug}
               subcategory={subcategory}
-              initialProducts={initialProducts}
+              products={initialProducts}
               categoryProducts={categoryProducts}
             />
           </Suspense>

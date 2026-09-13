@@ -3,7 +3,7 @@ import { AnnouncementBar } from "@/components/announcement-bar";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { CategoryPageHero } from "@/components/category-page-hero";
-import { ShopContent } from "@/components/shop-content";
+import { CatalogBrowser } from "@/components/catalog/catalog-browser";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 
 import { JsonLd } from "@/components/json-ld";
@@ -53,7 +53,7 @@ export default async function ShopPage() {
               </div>
             }
           >
-            <ShopContent initialProducts={initialProducts} />
+            <CatalogBrowser products={initialProducts} allProducts={initialProducts} />
           </Suspense>
         </section>
       </main>

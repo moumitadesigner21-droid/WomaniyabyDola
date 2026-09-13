@@ -250,6 +250,9 @@ export function cmsProductToProduct(product: CmsProduct): Product {
         : undefined,
     options: variants ? product.options : undefined,
     variants,
+    tags: product.tags.length ? product.tags : undefined,
+    fabric: product.fabric ?? undefined,
+    color: product.color ?? undefined,
   };
 }
 

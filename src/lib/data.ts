@@ -120,6 +120,10 @@ export interface Product {
   inStock?: boolean;
   /** Original price when a sale price is active (from CMS). */
   compareAtPrice?: number;
+  /** Searchable extras from the CMS. */
+  tags?: string[];
+  fabric?: string;
+  color?: string;
   /** Option groups (Size, Colour…) when the product has variants. */
   options?: ProductOption[];
   /** Purchasable combinations; when present, one must be chosen to buy. */

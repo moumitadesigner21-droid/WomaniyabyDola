@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { CategoryPageHero } from "@/components/category-page-hero";
-import { CategoryContent } from "@/components/category-content";
+import { CatalogBrowser } from "@/components/catalog/catalog-browser";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
@@ -72,9 +72,9 @@ export default async function CategoryPage({
               </div>
             }
           >
-            <CategoryContent
+            <CatalogBrowser
               category={categorySlug}
-              initialProducts={categoryProducts}
+              products={categoryProducts}
               categoryProducts={categoryProducts}
             />
           </Suspense>
