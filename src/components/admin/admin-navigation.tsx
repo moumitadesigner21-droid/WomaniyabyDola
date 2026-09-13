@@ -24,16 +24,18 @@ function NavRow({
   onAddChild?: () => void;
 }) {
   return (
-    <SortableItem id={item.id} className={`border border-charcoal/10 bg-white ${depth ? "ml-10" : ""}`}>
+    <SortableItem id={item.id} className={`border border-charcoal/10 bg-white ${depth ? "ml-6 md:ml-10" : ""}`}>
       {(handle) => (
-        <div className="grid items-end gap-3 p-3 md:grid-cols-[auto_1fr_1.4fr_auto_auto]">
+        <div className="grid grid-cols-[auto_1fr] items-end gap-x-3 gap-y-3 p-3 md:grid-cols-[auto_1fr_1.4fr_auto_auto]">
           <div className="pb-2">{handle}</div>
           <TextField label="Label" value={item.label} onChange={(label) => onChange({ label })} />
-          <LinkField label="Link" value={item.href} onChange={(href) => onChange({ href })} />
-          <div className="pb-2">
+          <div className="col-span-2 md:col-span-1">
+            <LinkField label="Link" value={item.href} onChange={(href) => onChange({ href })} />
+          </div>
+          <div className="pb-2 md:pb-2">
             <Toggle label="Shown" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
           </div>
-          <div className="flex gap-3 pb-2 text-[11px] tracking-[0.12em] uppercase">
+          <div className="flex justify-end gap-3 pb-2 text-[11px] tracking-[0.12em] uppercase md:justify-start">
             {onAddChild ? (
               <button type="button" onClick={onAddChild} className="text-charcoal hover:text-maroon">
                 + Sub-link

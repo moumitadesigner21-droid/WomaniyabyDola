@@ -48,7 +48,7 @@ export function Field({
   counter?: { value: number; max: number };
 }) {
   return (
-    <label className={`block ${className}`}>
+    <label className={`block min-w-0 ${className}`}>
       <span className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="text-xs tracking-[0.14em] text-charcoal uppercase">
           {label}

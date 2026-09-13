@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPrice } from "@/lib/format";
 import type { Order, OrderStatus, PaymentStatus } from "@/lib/orders/types";
 
@@ -20,6 +20,7 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const detailsRef = useRef<HTMLElement>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -57,6 +58,14 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
     }
   };
 
+  const selectOrder = (id: string) => {
+    setSelectedId(id);
+    // On phones the details panel is below the list — bring it into view.
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      window.setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+  };
+
   const copyPhone = async (phone: string) => {
     await navigator.clipboard.writeText(phone);
     setCopiedPhone(true);
@@ -64,8 +73,8 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
-      <section>
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <section className="min-w-0">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-warm-gray" />
@@ -100,7 +109,35 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
           ) : orders.length === 0 ? (
             <p className="p-8 text-sm text-warm-gray">No orders found.</p>
           ) : (
-            <table className="w-full text-left text-sm">
+            <>
+            {/* Mobile: cards */}
+            <ul className="divide-y divide-charcoal/10 md:hidden">
+              {orders.map((order) => (
+                <li key={order.id}>
+                  <button
+                    type="button"
+                    onClick={() => selectOrder(order.id)}
+                    className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left ${selectedId === order.id ? "bg-ivory" : ""}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-medium text-charcoal">#{order.orderNumber}</span>
+                      <span className="block truncate text-sm text-charcoal/80">
+                        {order.customerName}
+                        {order.customerId ? <span className="ml-2 bg-forest/10 px-1.5 py-0.5 text-[9px] tracking-[0.12em] text-forest uppercase">Account</span> : null}
+                      </span>
+                      <span className="block text-xs text-warm-gray">{order.customerPhone} · <span className="capitalize">{order.orderStatus}</span></span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-medium text-maroon">{formatPrice(order.total)}</span>
+                      <span className={`block text-[10px] tracking-[0.12em] uppercase ${order.whatsappNotified ? "text-forest" : "text-maroon"}`}>
+                        {order.whatsappNotified ? "WA sent" : "WA failed"}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <table className="hidden w-full text-left text-sm md:table">
               <thead className="bg-ivory text-[10px] tracking-[0.16em] text-warm-gray uppercase">
                 <tr>
                   <th className="px-4 py-3">Order</th>
@@ -117,7 +154,7 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                     className={`cursor-pointer border-t border-charcoal/8 hover:bg-ivory/60 ${
                       selectedId === order.id ? "bg-ivory" : ""
                     }`}
-                    onClick={() => setSelectedId(order.id)}
+                    onClick={() => selectOrder(order.id)}
                   >
                     <td className="px-4 py-3 font-medium text-charcoal">
                       #{order.orderNumber}
@@ -148,11 +185,12 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
       </section>
 
-      <aside className="h-fit border border-charcoal/10 bg-white p-6">
+      <aside ref={detailsRef} className="h-fit min-w-0 scroll-mt-20 border border-charcoal/10 bg-white p-6">
         {selected ? (
           <>
             <p className="text-[10px] tracking-[0.2em] text-gold uppercase">

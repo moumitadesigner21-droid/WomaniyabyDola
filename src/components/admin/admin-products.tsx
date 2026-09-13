@@ -74,7 +74,43 @@ export function AdminProductsPanel() {
 
       {message ? <p className="text-sm text-maroon">{message}</p> : null}
 
-      <div className="overflow-x-auto border border-charcoal/10 bg-white">
+      {/* Mobile: cards */}
+      <ul className="divide-y divide-charcoal/10 border border-charcoal/10 bg-white md:hidden">
+        {filtered.map((product) => (
+          <li key={product.id} className="flex gap-3 p-3">
+            <Image src={product.image} alt="" width={56} height={72} className="h-[72px] w-14 shrink-0 object-cover" />
+            <div className="min-w-0 flex-1">
+              <Link href={`/admin/products/${product.id}`} className="block truncate font-medium text-charcoal">
+                {product.name}
+              </Link>
+              <p className="text-xs text-warm-gray">{product.categorySlug} · stock {product.stockQuantity}</p>
+              <p className="mt-1 text-sm">
+                {product.salePrice ? (
+                  <>
+                    <span className="text-maroon">{formatPrice(product.salePrice)}</span>
+                    <span className="ml-2 text-xs text-warm-gray line-through">{formatPrice(product.price)}</span>
+                  </>
+                ) : (
+                  formatPrice(product.price)
+                )}
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {!product.enabled ? <span className="rounded bg-charcoal/10 px-2 py-0.5 text-[10px] uppercase">Disabled</span> : null}
+                {!product.inStock ? <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] uppercase text-red-700">Out of stock</span> : null}
+                {product.featured ? <span className="rounded bg-gold/20 px-2 py-0.5 text-[10px] uppercase">Featured</span> : null}
+              </div>
+              <div className="mt-2 flex gap-4 text-[11px] tracking-[0.12em] uppercase">
+                <Link href={`/admin/products/${product.id}`} className="text-maroon">Edit</Link>
+                <button type="button" onClick={() => handleDelete(product.id, product.name)} className="text-red-700">Delete</button>
+              </div>
+            </div>
+          </li>
+        ))}
+        {filtered.length === 0 ? <li className="p-6 text-sm text-warm-gray">No products match.</li> : null}
+      </ul>
+
+      {/* Tablet/desktop: table */}
+      <div className="hidden overflow-x-auto border border-charcoal/10 bg-white md:block">
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-charcoal/10 bg-ivory/60 text-xs tracking-[0.12em] uppercase text-warm-gray">
             <tr>

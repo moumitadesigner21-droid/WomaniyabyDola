@@ -43,7 +43,33 @@ export function AdminCustomersPanel() {
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-charcoal/10 bg-white">
+      {/* Mobile: cards */}
+      <ul className="divide-y divide-charcoal/10 border border-charcoal/10 bg-white md:hidden">
+        {customers.map((customer) => (
+          <li key={customer.id} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-charcoal">{customer.name}</p>
+                <p className="truncate text-xs text-warm-gray">{customer.email}</p>
+                {customer.phone ? <p className="text-xs text-warm-gray">{customer.phone}</p> : null}
+              </div>
+              <div className="shrink-0 text-right text-sm">
+                <p className="font-medium text-charcoal">{formatPrice(customer.totalSpent)}</p>
+                {customer.orderCount ? (
+                  <Link href={`/admin/orders?search=${encodeURIComponent(customer.email)}`} className="text-xs text-maroon underline-offset-2 hover:underline">
+                    {customer.orderCount} order{customer.orderCount === 1 ? "" : "s"}
+                  </Link>
+                ) : (
+                  <p className="text-xs text-warm-gray">No orders</p>
+                )}
+              </div>
+            </div>
+          </li>
+        ))}
+        {loaded && !customers.length ? <li className="px-4 py-8 text-center text-sm text-warm-gray">No customers yet.</li> : null}
+      </ul>
+
+      <div className="hidden overflow-x-auto border border-charcoal/10 bg-white md:block">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-ivory/60 text-[10px] tracking-[0.14em] text-warm-gray uppercase">
             <tr>
