@@ -13,6 +13,20 @@ const statusFilters: Array<{ value: OrderStatus | "all"; label: string }> = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
+const paymentLabels: Record<PaymentStatus, { label: string; className: string }> = {
+  paid: { label: "Paid", className: "text-forest" },
+  pending: { label: "Pending", className: "text-gold" },
+  failed: { label: "Failed", className: "text-maroon" },
+  user_dropped: { label: "Abandoned", className: "text-maroon" },
+  refunded: { label: "Refunded", className: "text-charcoal" },
+  COD: { label: "COD", className: "text-warm-gray" },
+};
+
+function PaymentStatusText({ status }: { status: PaymentStatus }) {
+  const payment = paymentLabels[status] ?? paymentLabels.pending;
+  return <span className={payment.className}>{payment.label}</span>;
+}
+
 export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState(initialSearch);
@@ -127,7 +141,11 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                         {order.customerName}
                         {order.customerId ? <span className="ml-2 bg-forest/10 px-1.5 py-0.5 text-[9px] tracking-[0.12em] text-forest uppercase">Account</span> : null}
                       </span>
-                      <span className="block text-xs text-warm-gray">{order.customerPhone} · <span className="capitalize">{order.orderStatus}</span></span>
+                      <span className="block text-xs text-warm-gray">
+                        {order.customerPhone} · <span className="capitalize">{order.orderStatus}</span>
+                        {" · "}
+                        <PaymentStatusText status={order.paymentStatus} />
+                      </span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block font-medium text-maroon">{formatPrice(order.total)}</span>
@@ -146,6 +164,7 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                   <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Total</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Payment</th>
                   <th className="px-4 py-3">WhatsApp</th>
                 </tr>
               </thead>
@@ -176,6 +195,9 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                     </td>
                     <td className="px-4 py-3">{formatPrice(order.total)}</td>
                     <td className="px-4 py-3 capitalize">{order.orderStatus}</td>
+                    <td className="px-4 py-3">
+                      <PaymentStatusText status={order.paymentStatus} />
+                    </td>
                     <td className="px-4 py-3">
                       {order.whatsappNotified ? (
                         <span className="text-forest">Sent</span>
