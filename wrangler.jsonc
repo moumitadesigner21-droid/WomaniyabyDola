@@ -1,7 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "womania-by-dola",
-  "main": ".open-next/worker.js",
+  "main": "payment-worker.mjs",
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "womaniabydola.com", "custom_domain": true },
+    { "pattern": "www.womaniabydola.com", "custom_domain": true }
+  ],
+  "triggers": { "crons": ["*/5 * * * *"] },
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
@@ -34,6 +40,6 @@
   },
   "vars": {
     // Public origin; override per environment. Secrets go through `wrangler secret put`.
-    "SITE_URL": "https://womania-by-dola.karao-digital.workers.dev"
+    "SITE_URL": "https://womaniabydola.com"
   }
 }

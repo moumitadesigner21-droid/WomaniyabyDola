@@ -1,11 +1,10 @@
 "use client";
+import { openCardCheckout } from "@/lib/payments/checkout";
 
 import { ArrowLeft, CheckCircle2, ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LAST_ORDER_KEY } from "@/components/thank-you-content";
 import { AddressCard, AddressFields, emptyAddress } from "@/components/account/address-book";
 import { useCart } from "@/lib/cart";
 import { useCustomer } from "@/lib/customer";
@@ -25,6 +24,14 @@ interface OrderPlacementResult {
   duplicate: boolean;
 }
 
+declare global {
+  interface Window {
+    Cashfree?: (options: { mode: "sandbox" | "production" }) => {
+      checkout: (options: { paymentSessionId: string }) => Promise<unknown> | unknown;
+    };
+  }
+}
+
 function makeIdempotencyKey() {
   return typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
@@ -32,9 +39,30 @@ function makeIdempotencyKey() {
 }
 
 export function CheckoutContent() {
-  const { items, subtotal, itemCount, hydrated, clearCart } = useCart();
+  const { items, subtotal, itemCount, hydrated } = useCart();
   const { customer, addresses, hydrated: customerHydrated, setAddresses } = useCustomer();
-  const [idempotencyKey] = useState(makeIdempotencyKey);
+  const [idempotencyKey, setIdempotencyKey] = useState(makeIdempotencyKey);
+  const [submitError, setSubmitError] = useState("");
+  const [recovering, setRecovering] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const key = localStorage.getItem("womania-active-checkout");
+        if (key) {
+          setIdempotencyKey(key);
+          const response = await fetch(`/api/payments/cashfree/order?key=${encodeURIComponent(key)}`);
+          if (!response.ok) throw new Error("Recovery unavailable");
+          const data = await response.json() as { returnUrl?: string | null };
+          if (data.returnUrl) { window.location.assign(data.returnUrl); return; }
+        }
+        if (active) setRecovering(false);
+      } catch {
+        if (active) setSubmitError("Unable to recover your previous checkout. Reload to check again before paying.");
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -65,10 +93,9 @@ export function CheckoutContent() {
   const [quote, setQuote] = useState<OrderQuote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<OrderPlacementResult | null>(null);
-  const router = useRouter();
+  const [result] = useState<OrderPlacementResult | null>(null);
+  const [paymentSessionId, setPaymentSessionId] = useState<string | null>(null);
 
   // `items` only changes reference when the cart mutates, so this is stable
   // across re-renders and safe to use as an effect dependency.
@@ -202,9 +229,7 @@ export function CheckoutContent() {
             <p>Total: {formatPrice(result.order.total)}</p>
             <p>
               Payment:{" "}
-              {result.order.paymentStatus === "COD"
-                ? "Cash on Delivery"
-                : result.order.paymentStatus}
+              {result.order.paymentStatus === "paid" ? "Paid" : "Payment pending"}
             </p>
           </div>
 
@@ -262,6 +287,7 @@ export function CheckoutContent() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (recovering) return;
 
     const deliveryAddress: CustomerAddressInput | undefined = chosenSaved
       ? chosenSaved
@@ -294,7 +320,10 @@ export function CheckoutContent() {
     setFieldErrors({});
 
     try {
-      const response = await fetch("/api/orders", {
+      const savedKey = localStorage.getItem("womania-active-checkout");
+      if (savedKey && savedKey !== idempotencyKey) { window.location.reload(); return; }
+      localStorage.setItem("womania-active-checkout", idempotencyKey);
+      const response = await fetch("/api/payments/cashfree/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -310,7 +339,7 @@ export function CheckoutContent() {
       });
 
       const raw = await response.text();
-      let payload: OrderPlacementResult & { error?: string; issues?: { path: string; message: string }[] } = {
+      let payload: OrderPlacementResult & { restart?: boolean; alreadyPaid?: boolean; returnUrl?: string; paymentSessionId?: string; environment?: "sandbox" | "production"; error?: string; issues?: { path: string; message: string }[] } = {
         order: {} as Order,
         whatsappSent: false,
         whatsappError: null,
@@ -331,6 +360,11 @@ export function CheckoutContent() {
       }
 
       if (!response.ok) {
+        if (payload.returnUrl) { window.location.assign(payload.returnUrl); return; }
+        if (payload.restart) {
+          localStorage.removeItem("womania-active-checkout");
+          setIdempotencyKey(makeIdempotencyKey());
+        }
         const issues = Object.fromEntries((payload.issues ?? []).map((issue) => [issue.path, issue.message]));
         setFieldErrors(issues);
         setSubmitError(
@@ -341,7 +375,15 @@ export function CheckoutContent() {
         return;
       }
 
-      // Save a newly typed address to the account for next time.
+      if (payload.alreadyPaid && payload.returnUrl) {
+        window.location.assign(payload.returnUrl);
+        return;
+      }
+      if (!payload.paymentSessionId) {
+        setSubmitError("Unable to start secure card checkout. Please try again.");
+        return;
+      }
+
       if (customer && !chosenSaved && saveAddress) {
         const saved = await fetch("/api/account/addresses", {
           method: "POST",
@@ -355,23 +397,10 @@ export function CheckoutContent() {
         }
       }
 
-      try {
-        window.sessionStorage.setItem(
-          LAST_ORDER_KEY,
-          JSON.stringify({
-            order: payload.order,
-            customerWhatsappSent: payload.customerWhatsappSent,
-            customerWhatsappError: payload.customerWhatsappError,
-            whatsappSent: payload.whatsappSent,
-          }),
-        );
-        clearCart();
-        router.push("/checkout/thank-you");
-      } catch {
-        // sessionStorage unavailable — fall back to the inline confirmation
-        clearCart();
-        setResult(payload);
-      }
+      setPaymentSessionId(payload.paymentSessionId);
+      const mode = payload.environment ?? "sandbox";
+      await openCardCheckout(payload.paymentSessionId, mode);
+      return;
     } catch {
       setSubmitError("Unable to place order. Please check your connection.");
     } finally {
@@ -390,9 +419,9 @@ export function CheckoutContent() {
       </Link>
 
       <h1 className="mt-6 font-serif text-3xl text-maroon sm:text-4xl">Checkout</h1>
-      <p className="mt-2 text-sm text-warm-gray">
-        Complete your details and place your order. The boutique owner will be
-        notified instantly on WhatsApp.
+          <p className="mt-2 text-sm text-warm-gray">
+        Complete your details and pay securely by card. The boutique owner will be
+        notified after Cashfree confirms the payment.
       </p>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_360px]">
@@ -535,9 +564,9 @@ export function CheckoutContent() {
             <span className="block text-xs tracking-[0.14em] text-warm-gray uppercase">
               Payment method
             </span>
-            <span className="mt-1 block font-medium">Cash on Delivery</span>
+            <span className="mt-1 block font-medium">Secure card payment via Cashfree</span>
             <span className="mt-0.5 block text-xs text-warm-gray">
-              Pay when your order arrives. We&apos;ll confirm on WhatsApp.
+              Your card details are collected securely by Cashfree and are not stored by Womania.
             </span>
           </div>
 
@@ -550,11 +579,11 @@ export function CheckoutContent() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || recovering}
             className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 bg-maroon px-4 py-3 text-xs font-semibold tracking-[0.16em] text-ivory uppercase transition-colors hover:bg-maroon-dark disabled:opacity-60"
           >
             <ShoppingBag className="h-4 w-4" />
-            {submitting ? "Placing Order..." : "Place Order"}
+            {recovering ? "Checking previous checkout…" : submitting ? "Opening secure checkout..." : paymentSessionId ? "Continue payment" : "Pay securely by card"}
           </button>
         </form>
 

@@ -325,7 +325,7 @@ function ShippingEditor() {
         <NumberField label="Minimum order (₹)" min={0} value={v.minOrderValue} onChange={(n) => editor.update({ ...v, minOrderValue: n ?? 0 })} />
         <TextField label="Delivery zones" className="md:col-span-3" value={v.deliveryZones} onChange={(deliveryZones) => editor.update({ ...v, deliveryZones })} />
       </div>
-      <Toggle label="Accept orders (cash on delivery)" hint="Turn off to pause checkout temporarily." checked={v.codEnabled} onChange={(codEnabled) => editor.update({ ...v, codEnabled })} />
+      <Toggle label="Accept online payments" hint="Turn off to temporarily pause card checkout." checked={v.paymentsEnabled ?? true} onChange={(paymentsEnabled) => editor.update({ ...v, paymentsEnabled })} />
     </BlobEditor>
   );
 }

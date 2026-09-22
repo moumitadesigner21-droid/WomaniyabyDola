@@ -49,9 +49,12 @@ export function ImageField({
   };
 
   return (
+    <>
     <Field label={label} hint={hint} error={error || localError} className={className}>
       <div className="flex gap-4">
-        <div
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault();
@@ -64,7 +67,7 @@ export function ImageField({
             <img src={value} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full items-center justify-center px-2 text-center text-[10px] text-warm-gray">
-              Drop image
+              Tap to add
             </span>
           )}
           {busy ? (
@@ -72,21 +75,21 @@ export function ImageField({
               Uploading…
             </span>
           ) : null}
-        </div>
+        </button>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => fileInput.current?.click()}
-              className="border border-maroon px-3 py-1.5 text-[11px] tracking-[0.12em] text-maroon uppercase hover:bg-maroon hover:text-ivory"
+              className="min-h-11 border border-maroon px-3 text-[11px] tracking-[0.12em] text-maroon uppercase hover:bg-maroon hover:text-ivory"
             >
               Upload
             </button>
             <button
               type="button"
               onClick={() => setLibraryOpen(true)}
-              className="border border-charcoal/20 px-3 py-1.5 text-[11px] tracking-[0.12em] text-charcoal uppercase hover:border-maroon/40"
+              className="min-h-11 border border-charcoal/20 px-3 text-[11px] tracking-[0.12em] text-charcoal uppercase hover:border-maroon/40"
             >
               Library
             </button>
@@ -94,7 +97,7 @@ export function ImageField({
               <button
                 type="button"
                 onClick={() => onChange("")}
-                className="px-2 py-1.5 text-[11px] tracking-[0.12em] text-warm-gray uppercase hover:text-maroon"
+                className="min-h-11 px-2 text-[11px] tracking-[0.12em] text-warm-gray uppercase hover:text-maroon"
               >
                 Remove
               </button>
@@ -126,23 +129,27 @@ export function ImageField({
           ) : null}
         </div>
       </div>
-
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(event) => {
-          void handleFile(event.target.files?.[0]);
-          event.target.value = "";
-        }}
-      />
-
-      <MediaLibraryModal
-        open={libraryOpen}
-        onClose={() => setLibraryOpen(false)}
-        onSelect={(urls) => urls[0] && onChange(urls[0])}
-      />
     </Field>
+
+    {/* Outside the field label, and not display:none, so iOS opens the picker once. */}
+    <input
+      ref={fileInput}
+      type="file"
+      accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/heic,image/heif"
+      className="sr-only"
+      tabIndex={-1}
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        void handleFile(file);
+      }}
+    />
+
+    <MediaLibraryModal
+      open={libraryOpen}
+      onClose={() => setLibraryOpen(false)}
+      onSelect={(urls) => urls[0] && onChange(urls[0])}
+    />
+    </>
   );
 }

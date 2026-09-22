@@ -199,8 +199,7 @@ export interface SiteSocial {
 export interface ShippingPaymentSettings {
   flatShippingRate: number;
   freeShippingThreshold: number | null;
-  codEnabled: boolean;
-  onlinePaymentEnabled: boolean;
+  paymentsEnabled: boolean;
   minOrderValue: number;
   deliveryZones: string;
 }

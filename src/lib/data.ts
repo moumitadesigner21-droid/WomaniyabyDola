@@ -114,6 +114,8 @@ export interface Product {
   dimensions?: string;
   gallery?: string[];
   hoverImage?: string;
+  /** Close-up of the pallu or drape. Shown in the product gallery. */
+  palluImage?: string;
   description?: string;
   cardBackground?: string;
   /** False when the CMS marks the product sold out. Undefined = static seed data (treated as in stock). */

@@ -9,7 +9,7 @@ import {
 
 const orderPatchSchema = z.object({
   orderStatus: z.enum(["new", "pending", "completed", "cancelled"]).optional(),
-  paymentStatus: z.enum(["COD", "paid", "pending"]).optional(),
+  paymentStatus: z.enum(["COD", "paid", "pending", "failed", "user_dropped", "refunded"]).optional(),
 });
 
 export const runtime = "nodejs";
@@ -46,6 +46,10 @@ export async function PATCH(
   if (!parsed.ok) return parsed.response;
 
   const { id } = await context.params;
+  const existing = await getOrderById(id);
+  if (existing && existing.paymentStatus !== "COD" && parsed.data.paymentStatus && parsed.data.paymentStatus !== existing.paymentStatus) {
+    return NextResponse.json({ error: "Online payment status is verified by Cashfree and cannot be changed manually. Refunds must be processed in Cashfree." }, { status: 409 });
+  }
   const order = await updateOrderStatus(id, parsed.data);
 
   if (!order) {

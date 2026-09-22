@@ -62,6 +62,7 @@ async function sendViaMetaCloudApi(
       `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
       {
         method: "POST",
+        signal: AbortSignal.timeout(15_000),
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -122,7 +123,7 @@ async function sendViaCallMeBot(
   const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(body)}&apikey=${encodeURIComponent(apiKey)}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     const responseBody = (await response.text()).trim();
 
     if (!response.ok) {

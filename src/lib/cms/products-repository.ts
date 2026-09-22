@@ -212,7 +212,7 @@ function toStorefrontVariants(product: CmsProduct): ProductVariant[] {
 
 export function cmsProductToProduct(product: CmsProduct): Product {
   const gallery = product.images
-    .filter((image) => image.imageType === "gallery")
+    .filter((image) => image.imageType !== "video_thumb")
     .map((image) => image.url);
 
   const variants = hasVariants(product) ? toStorefrontVariants(product) : undefined;
@@ -241,6 +241,7 @@ export function cmsProductToProduct(product: CmsProduct): Product {
     dimensions: product.dimensions ?? undefined,
     gallery: gallery.length ? gallery : undefined,
     hoverImage: product.hoverImage ?? undefined,
+    palluImage: product.palluImage ?? undefined,
     description: product.description ?? undefined,
     cardBackground: product.cardBackground ?? undefined,
     inStock: productInStock,

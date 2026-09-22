@@ -124,7 +124,7 @@ export function AdminSettingsPanel() {
           className="w-full border border-charcoal/15 bg-ivory px-4 py-3 text-sm outline-none focus:border-maroon"
         />
         <span className="mt-2 block text-xs text-warm-gray">
-          Free-shipping threshold, minimum order value and COD on/off live under{" "}
+          Free-shipping threshold, minimum order value and online payment availability live under{" "}
           <span className="font-medium text-charcoal">Content → Shipping &amp; Payment</span>.
         </span>
       </label>

@@ -20,3 +20,10 @@ CALLMEBOT_API_KEY=
 # Email backup notifications (Resend)
 RESEND_API_KEY=
 ORDER_EMAIL_FROM=orders@womaniabydola.com
+
+# Cashfree Payments. Use Sandbox credentials locally first.
+CASHFREE_CLIENT_ID=
+CASHFREE_CLIENT_SECRET=
+# Cashfree PG webhook signatures use CASHFREE_CLIENT_SECRET (no separate secret).
+CASHFREE_ENV=sandbox
+CASHFREE_API_VERSION=2025-01-01

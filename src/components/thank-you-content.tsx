@@ -24,9 +24,9 @@ export function ThankYouContent() {
   useEffect(() => {
     try {
       const raw = window.sessionStorage.getItem(LAST_ORDER_KEY);
-      setSummary(raw ? (JSON.parse(raw) as PlacedOrderSummary) : null);
+      queueMicrotask(() => setSummary(raw ? (JSON.parse(raw) as PlacedOrderSummary) : null));
     } catch {
-      setSummary(null);
+      queueMicrotask(() => setSummary(null));
     }
   }, []);
 
@@ -40,7 +40,7 @@ export function ThankYouContent() {
         <CheckCircle2 className="mx-auto h-12 w-12 text-forest" />
         <h1 className="mt-6 font-serif text-3xl text-maroon">Thank you</h1>
         <p className="mt-3 text-sm text-warm-gray">
-          Your order details will be shared on WhatsApp. If you have an account, you can find every order under My Account.
+          Your paid order details are available below. If you have an account, you can find every order under My Account.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Link href="/account/orders" className="inline-flex min-h-[48px] items-center justify-center border border-maroon px-8 py-3 text-xs font-semibold tracking-[0.18em] text-maroon uppercase transition-colors hover:bg-maroon hover:text-ivory">
@@ -63,7 +63,7 @@ export function ThankYouContent() {
         <p className="mt-6 text-[10px] tracking-[0.28em] text-gold uppercase">Order confirmed</p>
         <h1 className="mt-2 font-serif text-3xl text-maroon sm:text-4xl">Thank you, {order.customerName.split(" ")[0]}!</h1>
         <p className="mt-3 text-sm leading-relaxed text-warm-gray">
-          We&apos;ve received your order and will confirm it on WhatsApp shortly. Pay in cash when it arrives.
+          Your card payment has been confirmed. We&apos;ll keep you updated about delivery on WhatsApp.
         </p>
 
         <div className="mt-8 border-y border-charcoal/10 py-5">

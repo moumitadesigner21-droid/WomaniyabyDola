@@ -21,6 +21,17 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.womaniabydola.com" }],
+        destination: "https://womaniabydola.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/product/:slug",
+        destination: "/products/:slug",
+        permanent: true,
+      },
+      {
         source: "/products/multicoloured-cotton-gamcha-dupatta",
         destination: "/products/multicoloured-patchwork-gamcha-dupatta",
         permanent: true,

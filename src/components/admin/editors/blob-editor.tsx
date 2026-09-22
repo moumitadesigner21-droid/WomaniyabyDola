@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { Section } from "@/components/admin/form/fields";
+import { getUploadCount, subscribeUploadCount } from "@/components/admin/form/upload";
 
 /** Card wrapper with Save/Reset for a single site_content key. */
 export function BlobEditor({
@@ -23,6 +24,7 @@ export function BlobEditor({
   };
   children: ReactNode;
 }) {
+  const uploadsPending = useSyncExternalStore(subscribeUploadCount, getUploadCount, () => 0);
   return (
     <Section
       title={title}
@@ -45,11 +47,11 @@ export function BlobEditor({
           </button>
           <button
             type="button"
-            disabled={editor.saving || !editor.loaded}
+            disabled={editor.saving || !editor.loaded || uploadsPending > 0}
             onClick={() => void editor.save()}
-            className="border border-maroon bg-maroon px-4 py-2 text-xs tracking-[0.14em] text-ivory uppercase disabled:opacity-60"
+            className="min-h-11 border border-maroon bg-maroon px-4 py-2 text-xs tracking-[0.14em] text-ivory uppercase disabled:opacity-60"
           >
-            {editor.saving ? "Saving…" : "Save"}
+            {editor.saving ? "Saving…" : uploadsPending > 0 ? "Uploading…" : "Save"}
           </button>
         </div>
       }

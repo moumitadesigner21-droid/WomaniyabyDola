@@ -65,29 +65,37 @@ export function MediaLibrary({
     };
   }, [load]);
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
+  const handleFiles = async (files: File[]) => {
+    if (!files.length) return;
     setMessage("");
     setUploading(files.length);
     const uploaded: MediaItem[] = [];
-    for (const file of Array.from(files)) {
+    const failures: string[] = [];
+    for (const file of files) {
       try {
         const { url } = await uploadImage(file);
-        uploaded.push({
+        const item: MediaItem = {
           key: url.split("/").pop() ?? url,
           url,
           size: file.size,
           uploaded: new Date().toISOString(),
           contentType: file.type,
-        });
+        };
+        uploaded.push(item);
+        setItems((current) => [item, ...current.filter((entry) => entry.url !== url)]);
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Upload failed.");
+        failures.push(error instanceof Error ? error.message : "Upload failed.");
       } finally {
         setUploading((count) => count - 1);
       }
     }
-    setItems((current) => [...uploaded, ...current]);
-    if (onSelect && uploaded.length) {
+    if (failures.length && uploaded.length) {
+      setMessage(
+        `${uploaded.length} photo${uploaded.length === 1 ? "" : "s"} added. ${failures.length} failed — ${failures[0]}`,
+      );
+    } else if (failures.length) {
+      setMessage(failures[0]);
+    } else if (onSelect && uploaded.length) {
       onSelect(uploaded.map((item) => item.url));
     }
   };
@@ -123,7 +131,7 @@ export function MediaLibrary({
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
-          void handleFiles(event.dataTransfer.files);
+          void handleFiles(Array.from(event.dataTransfer.files));
         }}
         className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-charcoal/25 bg-ivory/60 px-4 py-3"
       >
@@ -132,7 +140,7 @@ export function MediaLibrary({
           <button
             type="button"
             onClick={() => fileInput.current?.click()}
-            className="font-medium text-maroon underline-offset-2 hover:underline"
+            className="min-h-11 font-medium text-maroon underline-offset-2 hover:underline"
           >
             choose files
           </button>
@@ -141,12 +149,14 @@ export function MediaLibrary({
         <input
           ref={fileInput}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/heic,image/heif"
           multiple
-          hidden
+          className="sr-only"
+          tabIndex={-1}
           onChange={(event) => {
-            void handleFiles(event.target.files);
+            const files = Array.from(event.target.files ?? []);
             event.target.value = "";
+            void handleFiles(files);
           }}
         />
         {uploading > 0 ? (
@@ -198,7 +208,7 @@ export function MediaLibrary({
                 <button
                   type="button"
                   onClick={() => void remove(item)}
-                  className="text-maroon opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                  className="min-h-8 px-1 text-maroon sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus:opacity-100"
                 >
                   Delete
                 </button>
@@ -248,20 +258,20 @@ export function MediaLibraryModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close"
         onClick={onClose}
         className="absolute inset-0 bg-charcoal/40"
       />
-      <div className="relative max-h-[85vh] w-full max-w-4xl overflow-y-auto border border-charcoal/10 bg-ivory p-5 shadow-2xl">
+      <div className="relative max-h-[100dvh] w-full overflow-y-auto border border-charcoal/10 bg-ivory p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[85vh] sm:max-w-4xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-serif text-xl text-maroon">Media Library</h3>
           <button
             type="button"
             onClick={onClose}
-            className="text-xs tracking-[0.14em] text-warm-gray uppercase hover:text-maroon"
+            className="min-h-11 px-2 text-xs tracking-[0.14em] text-warm-gray uppercase hover:text-maroon"
           >
             Close
           </button>

@@ -39,7 +39,7 @@ export default async function Home() {
   const voices = voicesGallerySchema.safeParse(data.voices);
   const shipping = (data.shippingPayment ?? {}) as {
     freeShippingThreshold?: number | null;
-    codEnabled?: boolean;
+    paymentsEnabled?: boolean;
     deliveryZones?: string;
   };
 
@@ -47,7 +47,7 @@ export default async function Home() {
     trust: (
       <TrustBenefits
         freeShippingThreshold={shipping.freeShippingThreshold ?? null}
-        codEnabled={shipping.codEnabled ?? true}
+        paymentsEnabled={shipping.paymentsEnabled ?? true}
         deliveryZones={shipping.deliveryZones}
       />
     ),

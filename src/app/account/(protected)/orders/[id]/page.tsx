@@ -21,7 +21,7 @@ export default async function AccountOrderPage({ params }: { params: Promise<{ i
   });
 
   const paymentLabel =
-    order.paymentStatus === "COD" ? "Cash on delivery" : order.paymentStatus === "paid" ? "Paid" : "Pending";
+    order.paymentStatus === "paid" ? "Paid" : order.paymentStatus === "failed" ? "Payment failed" : order.paymentStatus === "user_dropped" ? "Payment abandoned" : order.paymentStatus === "refunded" ? "Refunded" : "Payment pending";
 
   return (
     <div className="space-y-8">

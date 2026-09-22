@@ -78,8 +78,7 @@ export const CONTENT_DEFAULTS = {
   shipping_payment: shippingPaymentSchema.parse({
     flatShippingRate: 0,
     freeShippingThreshold: 2500,
-    codEnabled: true,
-    onlinePaymentEnabled: false,
+    paymentsEnabled: true,
     minOrderValue: 0,
     deliveryZones: "Pan India",
   }),

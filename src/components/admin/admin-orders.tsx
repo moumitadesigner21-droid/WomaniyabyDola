@@ -20,6 +20,8 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [retryNotice, setRetryNotice] = useState("");
+  const [retryBusy, setRetryBusy] = useState(false);
   const detailsRef = useRef<HTMLElement>(null);
 
   const loadOrders = useCallback(async () => {
@@ -282,6 +284,7 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                 Payment Status
                 <select
                   value={selected.paymentStatus}
+                  disabled={selected.paymentStatus !== "COD"}
                   onChange={(event) =>
                     updateOrder(selected.id, {
                       paymentStatus: event.target.value as PaymentStatus,
@@ -289,14 +292,30 @@ export function AdminOrdersPanel({ initialSearch = "" }: { initialSearch?: strin
                   }
                   className="mt-2 w-full border border-charcoal/15 bg-ivory px-3 py-2 text-sm"
                 >
-                  <option value="COD">Cash on Delivery</option>
+                  {selected.paymentStatus === "COD" ? <option value="COD">Legacy COD</option> : null}
                   <option value="paid">Paid</option>
                   <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                  <option value="user_dropped">Abandoned</option>
+                  <option value="refunded">Refunded</option>
                 </select>
+                {selected.paymentStatus !== "COD" ? <span className="mt-1 block text-[10px] normal-case tracking-normal text-warm-gray">Verified by Cashfree. Process refunds in the Cashfree dashboard.</span> : null}
               </label>
             </div>
 
             <div className="mt-4 space-y-2 text-xs leading-relaxed">
+              {selected.paymentStatus === "paid" ? <>
+                <button disabled={retryBusy} className="border px-3 py-2" onClick={async () => {
+                  setRetryBusy(true);
+                  try {
+                    const response = await fetch(`/api/orders/${selected.id}/notifications`, { method: "POST" });
+                    setRetryNotice(response.ok ? "Retry processed. Check delivery statuses below; failures will retry automatically." : "Unable to retry notifications.");
+                    await loadOrders();
+                  } catch { setRetryNotice("Unable to retry notifications."); }
+                  finally { setRetryBusy(false); }
+                }}>{retryBusy ? "Retrying…" : "Retry failed notifications"}</button>
+                <p role="status">{retryNotice}</p>
+              </> : null}
               <p>
                 <span className="text-warm-gray">Owner WhatsApp:</span>{" "}
                 {selected.whatsappNotified ? (

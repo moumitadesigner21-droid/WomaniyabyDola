@@ -1,5 +1,5 @@
 export type OrderStatus = "new" | "pending" | "completed" | "cancelled";
-export type PaymentStatus = "COD" | "paid" | "pending";
+export type PaymentStatus = "COD" | "paid" | "pending" | "failed" | "user_dropped" | "refunded";
 
 /** Cart line as sent by the browser. Prices are NOT trusted from here. */
 export interface OrderItemInput {
@@ -70,6 +70,15 @@ export interface Order {
   couponCode: string | null;
   customerId: string | null;
   paymentStatus: PaymentStatus;
+  cashfreeOrderId: string | null;
+  cashfreePaymentSessionId: string | null;
+  cashfreePaymentId: string | null;
+  cashfreePaymentMethod: string | null;
+  paymentFailureReason: string | null;
+  paymentVerifiedAt: string | null;
+  paymentUpdatedAt: string | null;
+  inventoryReservedUntil: string | null;
+  inventoryReleased: boolean;
   orderStatus: OrderStatus;
   whatsappNotified: boolean;
   whatsappError: string | null;
@@ -92,7 +101,7 @@ export interface StoreSettings {
 export interface ShippingPaymentConfig {
   flatShippingRate: number;
   freeShippingThreshold: number | null;
-  codEnabled: boolean;
+  paymentsEnabled: boolean;
   minOrderValue: number;
 }
 

@@ -7,10 +7,14 @@ import type { Order } from "@/lib/orders/types";
 
 function paymentLabel(status: string): string {
   switch (status) {
-    case "COD":
-      return "Cash on Delivery";
     case "paid":
       return "Paid";
+    case "failed":
+      return "Payment failed";
+    case "user_dropped":
+      return "Payment abandoned";
+    case "refunded":
+      return "Refunded";
     default:
       return "Pending";
   }

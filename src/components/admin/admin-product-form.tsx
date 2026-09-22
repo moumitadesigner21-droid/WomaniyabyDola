@@ -14,6 +14,7 @@ import {
 } from "@/components/admin/form/fields";
 import { GalleryField } from "@/components/admin/form/gallery-field";
 import { ImageField } from "@/components/admin/form/image-field";
+import { getUploadCount } from "@/components/admin/form/upload";
 import { SeoPreview } from "@/components/admin/form/seo-preview";
 import { VariantsField } from "@/components/admin/form/variants-field";
 import { CATEGORY_SLUGS, categories } from "@/lib/categories";
@@ -141,6 +142,12 @@ export function AdminProductForm({ productId }: { productId?: string }) {
     .map((image) => ({ url: image.url, altText: image.altText ?? "" }));
 
   const handleSave = async () => {
+    if (getUploadCount() > 0) {
+      setIsError(true);
+      setMessage("Wait for the photos to finish uploading, then save.");
+      return;
+    }
+
     setSaving(true);
     setMessage("");
     setFieldErrors({});
@@ -163,33 +170,40 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       })),
     };
 
-    const response = await fetch(
-      productId ? `/api/admin/products/${productId}` : "/api/admin/products",
-      {
-        method: productId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-    );
-
-    if (response.ok) {
-      const data = (await response.json()) as { product: CmsProduct };
-      setIsError(false);
-      setMessage("Product saved.");
-      if (!productId) router.push(`/admin/products/${data.product.id}`);
-    } else {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        issues?: { path: string; message: string }[];
-      };
-      setIsError(true);
-      setMessage(data.error ?? "Failed to save product.");
-      setFieldErrors(
-        Object.fromEntries((data.issues ?? []).map((issue) => [issue.path, issue.message])),
+    try {
+      const response = await fetch(
+        productId ? `/api/admin/products/${productId}` : "/api/admin/products",
+        {
+          method: productId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
       );
-    }
 
-    setSaving(false);
+      if (response.ok) {
+        const data = (await response.json()) as { product: CmsProduct };
+        setIsError(false);
+        setMessage("Product saved.");
+        if (!productId) router.push(`/admin/products/${data.product.id}`);
+      } else {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          issues?: { path: string; message: string }[];
+        };
+        setIsError(true);
+        setMessage(data.error ?? "Failed to save product.");
+        setFieldErrors(
+          Object.fromEntries((data.issues ?? []).map((issue) => [issue.path, issue.message])),
+        );
+      }
+    } catch {
+      setIsError(true);
+      setMessage(
+        "The connection dropped. Refresh before trying again — the save may already have gone through.",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -312,12 +326,13 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           />
           <ImageField
             label="Hover photo"
-            hint="Shown when the cursor is over the card."
+            hint="Shown in the product gallery, and when the cursor is over the card."
             value={form.hoverImage ?? ""}
             onChange={(hoverImage) => patch({ hoverImage })}
           />
           <ImageField
             label="Pallu / drape photo"
+            hint="Shown in the product gallery with the other photos."
             value={form.palluImage ?? ""}
             onChange={(palluImage) => patch({ palluImage })}
           />
@@ -493,7 +508,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           <button
             type="button"
             onClick={() => router.push("/admin/products")}
-            className="border border-charcoal/15 bg-white px-5 py-2.5 text-xs tracking-[0.14em] text-charcoal uppercase"
+            className="min-h-11 border border-charcoal/15 bg-white px-5 py-2.5 text-xs tracking-[0.14em] text-charcoal uppercase"
           >
             Back to products
           </button>

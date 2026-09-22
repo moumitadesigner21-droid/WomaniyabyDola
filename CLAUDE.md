@@ -37,6 +37,8 @@ Secrets are Worker secrets (`npx wrangler secret put NAME`); locally they live i
 | `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | Meta Cloud API (primary WhatsApp channel) |
 | `CALLMEBOT_API_KEY` | CallMeBot fallback WhatsApp channel |
 | `RESEND_API_KEY`, `ORDER_EMAIL_FROM` | Resend email backup for order notifications |
+| `CASHFREE_CLIENT_ID`, `CASHFREE_CLIENT_SECRET`, `CASHFREE_WEBHOOK_SECRET` | Cashfree Hosted Checkout API and signed webhook verification |
+| `CASHFREE_ENV`, `CASHFREE_API_VERSION` | Cashfree sandbox/production selection and pinned API version |
 
 Missing credentials never throw — notification senders return `{ success: false, error }` and the failure is stored on the order row.
 
@@ -95,7 +97,7 @@ Root `layout.tsx` builds metadata from the `seo` blob with a `%s | <siteTitle>` 
 
 ### Checkout / order flow
 
-Cart is client-only React context persisted to `localStorage` (`lib/cart.tsx`, key `womania-cart-v1`); the price it stores is display-only. `checkout-content.tsx` sends `{productId, slug, size, quantity}` lines + optional `couponCode` + a client-generated `idempotencyKey` to `POST /api/orders`. The route re-prices everything via `quoteOrder`, forces `paymentStatus: "COD"`, creates the order (decrementing stock), then fires three notifications in sequence — owner WhatsApp, customer WhatsApp, owner email — recording success/error per channel on the order row so retries (same idempotency key) skip channels that already succeeded. WhatsApp tries Meta Cloud API first, then CallMeBot. Message bodies come from the `whatsapp_template` / `customer_whatsapp_template` site-content keys (`{{placeholder}}` syntax, rendered in `orders/message.ts`).
+Cart is client-only React context persisted to `localStorage` (`lib/cart.tsx`, key `womania-cart-v1`); the price it stores is display-only. `checkout-content.tsx` sends `{productId, slug, variantId, size, quantity}` lines + customer details + optional `couponCode` + a client-generated `idempotencyKey` to `POST /api/payments/cashfree/order`. The route re-prices everything via `quoteOrder`, creates a local `pending` order, reserves stock, then creates a Cashfree order and returns its `payment_session_id`. The browser opens Cashfree Hosted Checkout; `/checkout/payment-return` and the signed `/api/payments/cashfree/webhook` verify the payment before setting `paymentStatus: "paid"`. Failed/user-dropped payments release reserved stock. Paid orders notify owner WhatsApp, customer WhatsApp, and owner email once, recording success/error per channel. Cashfree secrets are Worker secrets; card details never reach Womania.
 
 ### Styling
 

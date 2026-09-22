@@ -18,9 +18,9 @@ import {
   gamchaSubcategoryToGroup,
   type GamchaGroup,
 } from "@/lib/gamcha";
-import type { Product } from "@/lib/data";
 import { getSiteContent } from "@/lib/cms/content-repository";
-import type { HeroSlide } from "@/lib/data";
+import { getProductImagesFromProduct } from "@/lib/catalog";
+import type { HeroSlide, Product } from "@/lib/data";
 
 /** All sellable products from CMS, enabled only. Memoised per request. */
 export const getAllCatalogProducts = cache(async (): Promise<Product[]> => {
@@ -87,16 +87,16 @@ export async function getHeroSlides(): Promise<HeroSlide[]> {
 }
 
 export async function getProductImages(product: Product): Promise<string[]> {
+  const fromProduct = getProductImagesFromProduct(product);
   const cmsProduct = await getCmsProductBySlug(product.slug);
-  if (cmsProduct) {
-    const ordered = [...cmsProduct.images]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => image.url);
-    return [...new Set([product.image, ...ordered].filter(Boolean))];
-  }
+  if (!cmsProduct) return fromProduct;
 
-  const images = [product.image, ...(product.gallery ?? [])];
-  return [...new Set(images.filter(Boolean))];
+  const extras = [...cmsProduct.images]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((image) => image.url)
+    .filter((url) => url && !fromProduct.includes(url));
+
+  return [...fromProduct, ...extras];
 }
 
 export { listAllProducts, cmsProductToProduct, getCmsProductBySlug };

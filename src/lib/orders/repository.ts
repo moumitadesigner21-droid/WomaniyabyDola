@@ -38,6 +38,15 @@ function rowToOrder(row: Row, items: OrderItem[]): Order {
     couponCode: row.coupon_code ? String(row.coupon_code) : null,
     customerId: row.customer_id ? String(row.customer_id) : null,
     paymentStatus: row.payment_status as PaymentStatus,
+    cashfreeOrderId: row.cashfree_order_id ? String(row.cashfree_order_id) : null,
+    cashfreePaymentSessionId: row.cashfree_payment_session_id ? String(row.cashfree_payment_session_id) : null,
+    cashfreePaymentId: row.cashfree_payment_id ? String(row.cashfree_payment_id) : null,
+    cashfreePaymentMethod: row.cashfree_payment_method ? String(row.cashfree_payment_method) : null,
+    paymentFailureReason: row.payment_failure_reason ? String(row.payment_failure_reason) : null,
+    paymentVerifiedAt: row.payment_verified_at ? String(row.payment_verified_at) : null,
+    paymentUpdatedAt: row.payment_updated_at ? String(row.payment_updated_at) : null,
+    inventoryReservedUntil: row.inventory_reserved_until ? String(row.inventory_reserved_until) : null,
+    inventoryReleased: Boolean(row.inventory_released),
     orderStatus: row.order_status as OrderStatus,
     whatsappNotified: Boolean(row.whatsapp_notified),
     whatsappError: row.whatsapp_error ? String(row.whatsapp_error) : null,
@@ -102,18 +111,8 @@ async function nextOrderNumber(): Promise<string> {
   ].join("");
   const prefix = `WD-${datePart}`;
 
-  const last = await queryOne<{ order_number: string }>(
-    "SELECT order_number FROM orders WHERE order_number LIKE ? ORDER BY order_number DESC LIMIT 1",
-    `${prefix}-%`,
-  );
-
-  let sequence = 1;
-  if (last?.order_number) {
-    const lastSeq = Number.parseInt(last.order_number.split("-").at(-1) ?? "0", 10);
-    if (!Number.isNaN(lastSeq)) sequence = lastSeq + 1;
-  }
-
-  return `${prefix}-${String(sequence).padStart(4, "0")}`;
+  // Independent checkouts (and separate sandbox databases) must not share an ID.
+  return `${prefix}-${uuid().replaceAll("-", "").slice(0, 20)}`;
 }
 
 export const getSettings = cache(async function getSettings(): Promise<StoreSettings> {
@@ -189,7 +188,7 @@ export async function getShippingPaymentConfig(): Promise<ShippingPaymentConfig>
       threshold != null && Number.isFinite(threshold) && threshold > 0
         ? threshold
         : null,
-    codEnabled: content.codEnabled ?? true,
+    paymentsEnabled: content.paymentsEnabled ?? true,
     minOrderValue: Number.isFinite(minOrder) && minOrder > 0 ? minOrder : 0,
   };
 }
@@ -203,6 +202,13 @@ export async function getOrderByIdempotencyKey(key: string): Promise<Order | nul
 
 export async function getOrderById(id: string): Promise<Order | null> {
   const row = await queryOne("SELECT * FROM orders WHERE id = ?", id);
+  if (!row) return null;
+  const [order] = await hydrateOrders([row]);
+  return order ?? null;
+}
+
+export async function getOrderByNumber(orderNumber: string): Promise<Order | null> {
+  const row = await queryOne("SELECT * FROM orders WHERE order_number = ?", orderNumber);
   if (!row) return null;
   const [order] = await hydrateOrders([row]);
   return order ?? null;
@@ -279,8 +285,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const orderNumber = await nextOrderNumber();
   const createdAt = nowIso();
 
-  // D1 batches are atomic, but they cannot abort mid-way on a business rule,
-  // so we check the stock decrements' `changes` afterwards and compensate.
+  // Each conditional decrement is checked inside the atomic D1 batch below.
   const stockStatements = input.items.map((item) =>
     item.variantId
       ? stmt(
@@ -304,13 +309,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         ),
   );
 
-  const results = await batch([
+  try {
+    await batch([
     stmt(
       `INSERT INTO orders (
         id, order_number, customer_name, customer_phone, customer_email,
         customer_address, notes, subtotal, shipping, discount, total, coupon_code,
-        customer_id, payment_status, order_status, idempotency_key, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+        customer_id, payment_status, order_status, idempotency_key, created_at, inventory_reserved_until
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
       id,
       orderNumber,
       input.customerName,
@@ -327,6 +333,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       input.paymentStatus,
       input.idempotencyKey,
       createdAt,
+      input.paymentStatus === "pending" ? new Date(Date.now() + 30 * 60_000).toISOString() : null,
     ),
     ...input.items.map((item) =>
       stmt(
@@ -343,33 +350,19 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         item.price,
       ),
     ),
-    ...stockStatements,
+    ...stockStatements.flatMap((statement) => [
+      statement,
+      // A zero-row stock update aborts the entire D1 transaction, including the order.
+      stmt("INSERT INTO order_stock_checks (valid) VALUES (changes())"),
+    ]),
+    stmt("DELETE FROM order_stock_checks"),
   ]);
-
-  const stockResults = results.slice(1 + input.items.length);
-  const failedIndex = stockResults.findIndex((r) => (r.meta.changes ?? 0) === 0);
-  if (failedIndex !== -1) {
-    // Roll back: restore stock for the lines that did decrement, drop the order.
-    const succeeded = input.items.filter((_, i) => i !== failedIndex && (stockResults[i].meta.changes ?? 0) > 0);
-    await batch([
-      ...succeeded.map((item) =>
-        item.variantId
-          ? stmt(
-              "UPDATE product_variants SET stock_quantity = stock_quantity + ?, in_stock = 1 WHERE product_id = ? AND id = ?",
-              item.quantity,
-              item.productId,
-              item.variantId,
-            )
-          : stmt(
-              "UPDATE products SET stock_quantity = stock_quantity + ?, in_stock = 1 WHERE id = ?",
-              item.quantity,
-              item.productId,
-            ),
-      ),
-      stmt("DELETE FROM order_items WHERE order_id = ?", id),
-      stmt("DELETE FROM orders WHERE id = ?", id),
-    ]);
-    throw new OutOfStockError(input.items[failedIndex].name);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("stock_available")) {
+      throw new OutOfStockError("An item in your cart");
+    }
+    if (await getOrderByIdempotencyKey(input.idempotencyKey)) return createOrder(input);
+    throw error;
   }
 
   const order = await getOrderById(id);
@@ -418,6 +411,55 @@ export async function updateOrderNotificationStatus(
   if (fields.length === 0) return;
 
   await execute(`UPDATE orders SET ${fields.join(", ")} WHERE id = ?`, ...values, orderId);
+}
+
+export async function updateCashfreePayment(
+  orderId: string,
+  update: {
+    paymentStatus: PaymentStatus;
+    cashfreeOrderId?: string | null;
+    cashfreePaymentSessionId?: string | null;
+    cashfreePaymentId?: string | null;
+    cashfreePaymentMethod?: string | null;
+    paymentFailureReason?: string | null;
+    paymentVerifiedAt?: string | null;
+  },
+): Promise<Order | null> {
+  const fields = ["payment_status = ?", "payment_updated_at = ?"];
+  const values: Array<string | null> = [update.paymentStatus, nowIso()];
+  const optional: Array<[string, string | null | undefined]> = [
+    ["cashfree_order_id", update.cashfreeOrderId],
+    ["cashfree_payment_session_id", update.cashfreePaymentSessionId],
+    ["cashfree_payment_id", update.cashfreePaymentId],
+    ["cashfree_payment_method", update.cashfreePaymentMethod],
+    ["payment_failure_reason", update.paymentFailureReason],
+    ["payment_verified_at", update.paymentVerifiedAt],
+  ];
+  for (const [column, value] of optional) {
+    if (value !== undefined) {
+      fields.push(`${column} = ?`);
+      values.push(value);
+    }
+  }
+  await execute(`UPDATE orders SET ${fields.join(", ")} WHERE id = ? AND payment_status NOT IN ('paid', 'refunded') AND inventory_released = 0`, ...values, orderId);
+  return getOrderById(orderId);
+}
+
+/** Releases inventory exactly once when a pending payment will not complete. */
+export async function releaseOrderInventory(orderId: string): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order || order.inventoryReleased || order.paymentStatus === "paid") return order;
+
+  // Stock restoration and the release marker commit in one transaction.
+  const eligible = "EXISTS (SELECT 1 FROM orders WHERE id = ? AND inventory_released = 0 AND payment_status NOT IN ('paid', 'refunded'))";
+  const statements = order.items.flatMap((item) =>
+    item.variantId
+      ? [stmt(`UPDATE product_variants SET stock_quantity = stock_quantity + ?, in_stock = 1 WHERE product_id = ? AND id = ? AND ${eligible}`, item.quantity, item.productId, item.variantId, orderId)]
+      : [stmt(`UPDATE products SET stock_quantity = stock_quantity + ?, in_stock = 1 WHERE id = ? AND ${eligible}`, item.quantity, item.productId, orderId)],
+  );
+  statements.push(stmt("UPDATE orders SET inventory_released = 1, payment_status = 'failed', order_status = CASE WHEN order_status = 'new' THEN 'cancelled' ELSE order_status END WHERE id = ? AND inventory_released = 0 AND payment_status NOT IN ('paid', 'refunded')", orderId));
+  await batch(statements);
+  return getOrderById(orderId);
 }
 
 export async function updateOrderStatus(

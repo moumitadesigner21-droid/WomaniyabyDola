@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { getUploadCount, subscribeUploadCount } from "@/components/admin/form/upload";
 
 export const inputClass =
   "w-full border border-charcoal/15 bg-white px-3 py-2.5 text-sm text-charcoal outline-none transition-colors focus:border-maroon disabled:bg-ivory/60";
@@ -446,17 +447,21 @@ export function SaveBar({
   label?: string;
   secondary?: ReactNode;
 }) {
+  const uploadsPending = useSyncExternalStore(subscribeUploadCount, getUploadCount, () => 0);
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-charcoal/10 bg-ivory/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+    <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-charcoal/10 bg-ivory/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <button
         type="button"
-        disabled={saving}
+        disabled={saving || uploadsPending > 0}
         onClick={onSave}
-        className="border border-maroon bg-maroon px-5 py-2.5 text-xs tracking-[0.14em] text-ivory uppercase transition-colors hover:bg-maroon-dark disabled:opacity-60"
+        className="min-h-11 border border-maroon bg-maroon px-5 py-2.5 text-xs tracking-[0.14em] text-ivory uppercase transition-colors hover:bg-maroon-dark disabled:opacity-60"
       >
         {saving ? "Saving..." : label}
       </button>
       {secondary}
+      {uploadsPending > 0 ? (
+        <p className="text-sm text-warm-gray">Photos are still uploading. Save stays off until they finish.</p>
+      ) : null}
       {message ? (
         <p className={`text-sm ${isError ? "text-maroon" : "text-forest"}`}>{message}</p>
       ) : null}

@@ -285,8 +285,7 @@ export const socialSchema = z.object({
 export const shippingPaymentSchema = z.object({
   flatShippingRate: z.number().min(0).default(0),
   freeShippingThreshold: z.number().min(0).nullable().default(null),
-  codEnabled: z.boolean().default(true),
-  onlinePaymentEnabled: z.boolean().default(false),
+  paymentsEnabled: z.boolean().default(true),
   minOrderValue: z.number().min(0).default(0),
   deliveryZones: optStr(200),
 });

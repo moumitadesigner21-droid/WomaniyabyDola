@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin/session";
 import { withErrorHandling } from "@/lib/api/validation";
+import { sniffImageType } from "@/lib/cms/image-sniff";
 import { UPLOAD_PREFIX, uploadKeyFromUrl } from "@/lib/cms/media";
 import { isImageUrlReferenced } from "@/lib/cms/products-repository";
 import { getMediaBucket, uuid } from "@/lib/db";
@@ -17,23 +18,6 @@ const ALLOWED_TYPES: Record<string, string> = {
   "image/avif": ".avif",
   "image/gif": ".gif",
 };
-
-const MAGIC_BYTES: { type: string; bytes: number[]; offset?: number }[] = [
-  { type: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
-  { type: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47] },
-  { type: "image/gif", bytes: [0x47, 0x49, 0x46, 0x38] },
-  { type: "image/webp", bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 },
-  // AVIF/HEIF: "ftyp" box at offset 4
-  { type: "image/avif", bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 },
-];
-
-function sniffType(bytes: Uint8Array): string | null {
-  for (const { type, bytes: magic, offset = 0 } of MAGIC_BYTES) {
-    if (bytes.length < offset + magic.length) continue;
-    if (magic.every((byte, i) => bytes[offset + i] === byte)) return type;
-  }
-  return null;
-}
 
 export const POST = withErrorHandling(async (request: Request) => {
   if (!(await isAdminAuthenticated())) {
@@ -55,7 +39,18 @@ export const POST = withErrorHandling(async (request: Request) => {
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const sniffed = sniffType(bytes);
+  const sniffed = sniffImageType(bytes);
+
+  if (sniffed === "image/heic") {
+    return NextResponse.json(
+      {
+        error:
+          "This iPhone photo (HEIC) could not be converted. Upload it again, or send a JPEG.",
+      },
+      { status: 415 },
+    );
+  }
+
   const ext = sniffed ? ALLOWED_TYPES[sniffed] : undefined;
 
   if (!sniffed || !ext) {

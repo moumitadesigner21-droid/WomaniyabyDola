@@ -1,4 +1,4 @@
-import { BadgeCheck, MessageCircle, RotateCcw, Truck, Wallet } from "lucide-react";
+import { BadgeCheck, CreditCard, MessageCircle, RotateCcw, Truck } from "lucide-react";
 
 /**
  * Slim benefits strip under the hero. Text comes from the store's shipping and
@@ -6,12 +6,12 @@ import { BadgeCheck, MessageCircle, RotateCcw, Truck, Wallet } from "lucide-reac
  */
 export function TrustBenefits({
   freeShippingThreshold,
-  codEnabled,
+  paymentsEnabled,
   deliveryZones,
   returnsDays = 7,
 }: {
   freeShippingThreshold: number | null;
-  codEnabled: boolean;
+  paymentsEnabled: boolean;
   deliveryZones?: string;
   returnsDays?: number;
 }) {
@@ -28,8 +28,8 @@ export function TrustBenefits({
         : `${deliveryZones || "Pan-India"} delivery`,
       note: freeShippingThreshold ? `${deliveryZones || "Pan-India"} delivery` : "Carefully packed & tracked",
     },
-    ...(codEnabled
-      ? [{ icon: Wallet, title: "Cash on delivery", note: "Pay when your order arrives" }]
+    ...(paymentsEnabled
+      ? [{ icon: CreditCard, title: "Secure card payments", note: "Pay safely through Cashfree" }]
       : []),
     {
       icon: RotateCcw,
